@@ -1,5 +1,14 @@
+use std::f32::consts::PI;
+use std::ops::Sub;
 use std::time::Duration;
 
+use bevy::asset::Handle;
+use bevy::color::Color;
+use bevy::color::palettes::css;
+use bevy::image::Image;
+use bevy::math::{EulerRot, Quat, Vec2, Vec3};
+use bevy::prelude::{ColorMaterial, Entity, GlobalTransform, IntoScheduleConfigs, Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Transform, With, default, ButtonInput, KeyCode, Single};
+use bevy::sprite::SpriteImageMode;
 use bevy::{
 	DefaultPlugins,
 	app::{App, Startup, Update},
@@ -21,11 +30,119 @@ fn main() {
 	App::new()
 		.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
 		.add_systems(Startup, setup)
-		.add_systems(Update, animate_sprite)
+		.add_systems(Update, move_player)
+		.add_systems(Update, (despawn, draw_chains).chain())
+		//.add_systems(Update, animate_sprite)
 		.run();
 }
 
 fn setup(
+	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+	let color: Color = css::ALICE_BLUE.into();
+	let red: Color = css::INDIAN_RED.into();
+	commands.spawn(Camera2d);
+	let e = commands
+		.spawn((
+			Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+			MeshMaterial2d(materials.add(color)),
+			Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
+		))
+		.id();
+	commands.spawn((
+		Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+		MeshMaterial2d(materials.add(red)),
+		Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
+		Chained {
+			prev: e,
+			next: None,
+		},
+		Player,
+	));
+	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
+}
+
+#[derive(Component)]
+pub struct Player;
+
+fn move_player(
+	mut player: Single<&mut Transform, With<Player>>,
+	keyboard: ResMut<ButtonInput<KeyCode>>,
+) {
+	let mut change = Vec2::default();
+	if keyboard.pressed(KeyCode::KeyA) {
+		change.x -= 1.0;
+	}
+	if keyboard.pressed(KeyCode::KeyD) {
+		change.x += 1.0;
+	}
+	if keyboard.pressed(KeyCode::KeyW) {
+		change.y += 1.0;
+	}
+	if keyboard.pressed(KeyCode::KeyS) {
+		change.y -= 1.0;
+	}
+	
+	let change = change.normalize_or_zero() * 2.0;
+	player.translation += change.extend(0.0);
+}
+
+#[derive(Resource, Deref, DerefMut)]
+pub struct ChainAsset(pub Handle<Image>);
+
+#[derive(Component)]
+pub struct Chained {
+	prev: Entity,
+	next: Option<Entity>,
+}
+
+#[derive(Component)]
+pub struct Despawn;
+
+fn draw_chains(
+	mut commands: Commands,
+	chained: Query<(Entity, &Chained)>,
+	positions: Query<&GlobalTransform>,
+	chain_asset: Res<ChainAsset>,
+) {
+	const CHAIN_SIZE: f32 = 12.0 * 3.0;
+	for (entity, chained) in chained.iter() {
+		let position_1 = positions.get(entity).unwrap();
+		let position_2 = positions.get(chained.prev).unwrap();
+		let delta = position_1.translation() - position_2.translation();
+		// angle in radians around Z‐axis (so sprite “points” from A→B)
+		let angle = delta.y.atan2(delta.x);
+		let distance = position_1.translation().distance(position_2.translation());
+		let distance = (distance / CHAIN_SIZE) as u32;
+		for chain in 0..distance {
+			let mut chain = position_1.translation().lerp(position_2.translation(), (chain as f32 / distance as f32));
+			chain.z = -1.0;
+			commands.spawn((
+				Sprite {
+					image: chain_asset.0.clone(),
+					..default()
+				},
+				Transform::from_translation(chain)
+					.with_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, 0.0, PI / 2.0 + angle))
+					.with_scale(Vec3::splat(3.0))
+
+				,
+				Despawn,
+			));
+		}
+	}
+}
+
+fn despawn(mut commands: Commands, query: Query<Entity, With<Despawn>>) {
+	for entity in query.iter() {
+		commands.entity(entity).despawn();
+	}
+}
+
+/*fn setup(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
 	mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
@@ -97,4 +214,4 @@ fn animate_sprite(
 			}
 		}
 	}
-}
+}*/
