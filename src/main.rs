@@ -1,5 +1,5 @@
 use std::f32::consts::PI;
-use std::ops::Sub;
+use std::ops::{AddAssign, Sub};
 use std::time::Duration;
 
 use bevy::asset::Handle;
@@ -7,7 +7,11 @@ use bevy::color::Color;
 use bevy::color::palettes::css;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
-use bevy::prelude::{ColorMaterial, Entity, GlobalTransform, IntoScheduleConfigs, Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Transform, With, default, ButtonInput, KeyCode, Single};
+use bevy::prelude::{
+	ButtonInput, ColorMaterial, Entity, GlobalTransform, IntoScheduleConfigs, KeyCode,
+	Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Single, Transform, With,
+	default,
+};
 use bevy::sprite::SpriteImageMode;
 use bevy::{
 	DefaultPlugins,
@@ -25,12 +29,13 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
+use random_number::random;
 
 fn main() {
 	App::new()
 		.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
 		.add_systems(Startup, setup)
-		.add_systems(Update, move_player)
+		.add_systems(Update, (move_player, move_enemy, move_enemy_2))
 		.add_systems(Update, (despawn, draw_chains).chain())
 		//.add_systems(Update, animate_sprite)
 		.run();
@@ -45,28 +50,56 @@ fn setup(
 	let color: Color = css::ALICE_BLUE.into();
 	let red: Color = css::INDIAN_RED.into();
 	commands.spawn(Camera2d);
-	let e = commands
-		.spawn((
-			Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-			MeshMaterial2d(materials.add(color)),
-			Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
-		))
-		.id();
-	commands.spawn((
+	let mut e = commands.spawn((
 		Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
 		MeshMaterial2d(materials.add(red)),
 		Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
-		Chained {
-			prev: e,
-			next: None,
-		},
 		Player,
-	));
+	)).id();
+	for _ in 0..10 {
+		e = commands
+			.spawn((
+				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+				MeshMaterial2d(materials.add(color)),
+				Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
+				Chained {
+					prev: e,
+				},
+				Enemy,
+				Velocity(Vec3::new(0.0, 0.0, 0.0)),
+			))
+			.id();
+	}
+	
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
 }
 
 #[derive(Component)]
+pub struct Enemy;
+
+#[derive(Component)]
 pub struct Player;
+
+#[derive(Component)]
+pub struct Velocity(pub Vec3);
+
+fn move_enemy(
+	mut enemy: Query<&mut Velocity, With<Enemy>>,
+) {
+	for mut e in enemy.iter_mut() {
+		if random!(0.0..1.0) < 0.01 {
+			e.0 = Vec3::new(random!(0.0..1.0), random!(0.0..1.0), 0.0);
+		}
+	}
+}
+
+fn move_enemy_2(
+	mut enemy: Query<(&mut Transform, &Velocity)>,
+) {
+	for (mut t, v) in enemy.iter_mut() {
+		t.translation.add_assign(v.0);
+	}
+}
 
 fn move_player(
 	mut player: Single<&mut Transform, With<Player>>,
@@ -85,7 +118,7 @@ fn move_player(
 	if keyboard.pressed(KeyCode::KeyS) {
 		change.y -= 1.0;
 	}
-	
+
 	let change = change.normalize_or_zero() * 2.0;
 	player.translation += change.extend(0.0);
 }
@@ -96,7 +129,6 @@ pub struct ChainAsset(pub Handle<Image>);
 #[derive(Component)]
 pub struct Chained {
 	prev: Entity,
-	next: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -116,9 +148,13 @@ fn draw_chains(
 		// angle in radians around Z‐axis (so sprite “points” from A→B)
 		let angle = delta.y.atan2(delta.x);
 		let distance = position_1.translation().distance(position_2.translation());
+		let temp = (distance / CHAIN_SIZE);
 		let distance = (distance / CHAIN_SIZE) as u32;
+		let remainder = temp - distance as f32;
 		for chain in 0..distance {
-			let mut chain = position_1.translation().lerp(position_2.translation(), (chain as f32 / distance as f32));
+			let mut chain = position_1
+				.translation()
+				.lerp(position_2.translation(), (chain as f32 / distance as f32));
 			chain.z = -1.0;
 			commands.spawn((
 				Sprite {
@@ -126,10 +162,15 @@ fn draw_chains(
 					..default()
 				},
 				Transform::from_translation(chain)
-					.with_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, 0.0, PI / 2.0 + angle))
-					.with_scale(Vec3::splat(3.0))
-
-				,
+					.with_rotation(Quat::from_euler(
+						EulerRot::XYZ,
+						0.0,
+						0.0,
+						PI / 2.0 + angle,
+					))
+					.with_scale(
+						Vec3::splat(3.0) * ((remainder / distance as f32) + 1.0),
+					),
 				Despawn,
 			));
 		}
