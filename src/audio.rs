@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<Music>();
-    app.register_type::<SoundEffect>();
+	app.register_type::<Music>();
+	app.register_type::<SoundEffect>();
 
-    app.add_systems(
-        Update,
-        apply_global_volume.run_if(resource_changed::<GlobalVolume>),
-    );
+	app.add_systems(
+		Update,
+		apply_global_volume.run_if(resource_changed::<GlobalVolume>),
+	);
 }
 
 /// An organizational marker component that should be added to a spawned [`AudioPlayer`] if it's in the
@@ -20,7 +20,7 @@ pub struct Music;
 
 /// A music audio instance.
 pub fn music(handle: Handle<AudioSource>) -> impl Bundle {
-    (AudioPlayer(handle), PlaybackSettings::LOOP, Music)
+	(AudioPlayer(handle), PlaybackSettings::LOOP, Music)
 }
 
 /// An organizational marker component that should be added to a spawned [`AudioPlayer`] if it's in the
@@ -33,15 +33,15 @@ pub struct SoundEffect;
 
 /// A sound effect audio instance.
 pub fn sound_effect(handle: Handle<AudioSource>) -> impl Bundle {
-    (AudioPlayer(handle), PlaybackSettings::DESPAWN, SoundEffect)
+	(AudioPlayer(handle), PlaybackSettings::DESPAWN, SoundEffect)
 }
 
 /// [`GlobalVolume`] doesn't apply to already-running audio entities, so this system will update them.
 fn apply_global_volume(
-    global_volume: Res<GlobalVolume>,
-    mut audio_query: Query<(&PlaybackSettings, &mut AudioSink)>,
+	global_volume: Res<GlobalVolume>,
+	mut audio_query: Query<(&PlaybackSettings, &mut AudioSink)>,
 ) {
-    for (playback, mut sink) in &mut audio_query {
-        sink.set_volume(global_volume.volume * playback.volume);
-    }
+	for (playback, mut sink) in &mut audio_query {
+		sink.set_volume(global_volume.volume * playback.volume);
+	}
 }

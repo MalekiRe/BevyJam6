@@ -15,64 +15,67 @@ mod theme;
 use bevy::{asset::AssetMetaCheck, prelude::*};
 
 fn main() -> AppExit {
-    App::new().add_plugins(AppPlugin).run()
+	App::new().add_plugins(AppPlugin).run()
 }
 
 pub struct AppPlugin;
 
 impl Plugin for AppPlugin {
-    fn build(&self, app: &mut App) {
-        // Add Bevy plugins.
-        app.add_plugins(
-            DefaultPlugins
-                .set(AssetPlugin {
-                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
-                    // This causes errors and even panics on web build on itch.
-                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
-                    meta_check: AssetMetaCheck::Never,
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Window {
-                        title: "Jam6".to_string(),
-                        fit_canvas_to_parent: true,
-                        ..default()
-                    }
-                    .into(),
-                    ..default()
-                }),
-        );
+	fn build(&self, app: &mut App) {
+		// Add Bevy plugins.
+		app.add_plugins(
+			DefaultPlugins
+				.set(AssetPlugin {
+					// Wasm builds will check for meta files (that don't exist) if this isn't set.
+					// This causes errors and even panics on web build on itch.
+					// See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+					meta_check: AssetMetaCheck::Never,
+					..default()
+				})
+				.set(WindowPlugin {
+					primary_window: Window {
+						title: "Jam6".to_string(),
+						fit_canvas_to_parent: true,
+						..default()
+					}
+					.into(),
+					..default()
+				}),
+		);
 
-        // Add other plugins.
-        app.add_plugins((
-            asset_tracking::plugin,
-            audio::plugin,
-            demo::plugin,
-            #[cfg(feature = "dev")]
-            dev_tools::plugin,
-            menus::plugin,
-            screens::plugin,
-            theme::plugin,
-        ));
+		#[cfg(feature = "dev")]
+		compile_error!("yeet");
 
-        // Order new `AppSystems` variants by adding them here:
-        app.configure_sets(
-            Update,
-            (
-                AppSystems::TickTimers,
-                AppSystems::RecordInput,
-                AppSystems::Update,
-            )
-                .chain(),
-        );
+		// Add other plugins.
+		app.add_plugins((
+			asset_tracking::plugin,
+			audio::plugin,
+			demo::plugin,
+			#[cfg(feature = "dev")]
+			dev_tools::plugin,
+			menus::plugin,
+			screens::plugin,
+			theme::plugin,
+		));
 
-        // Set up the `Pause` state.
-        app.init_state::<Pause>();
-        app.configure_sets(Update, PausableSystems.run_if(in_state(Pause(false))));
+		// Order new `AppSystems` variants by adding them here:
+		app.configure_sets(
+			Update,
+			(
+				AppSystems::TickTimers,
+				AppSystems::RecordInput,
+				AppSystems::Update,
+			)
+				.chain(),
+		);
 
-        // Spawn the main camera.
-        app.add_systems(Startup, spawn_camera);
-    }
+		// Set up the `Pause` state.
+		app.init_state::<Pause>();
+		app.configure_sets(Update, PausableSystems.run_if(in_state(Pause(false))));
+
+		// Spawn the main camera.
+		app.add_systems(Startup, spawn_camera);
+	}
 }
 
 /// High-level groupings of systems for the app in the `Update` schedule.
@@ -80,12 +83,12 @@ impl Plugin for AppPlugin {
 /// call above.
 #[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 enum AppSystems {
-    /// Tick timers.
-    TickTimers,
-    /// Record player input.
-    RecordInput,
-    /// Do everything else (consider splitting this into further variants).
-    Update,
+	/// Tick timers.
+	TickTimers,
+	/// Record player input.
+	RecordInput,
+	/// Do everything else (consider splitting this into further variants).
+	Update,
 }
 
 /// Whether or not the game is paused.
@@ -98,5 +101,5 @@ struct Pause(pub bool);
 struct PausableSystems;
 
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn((Name::new("Camera"), Camera2d));
+	commands.spawn((Name::new("Camera"), Camera2d));
 }
