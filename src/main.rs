@@ -6,18 +6,21 @@ use std::time::Duration;
 use bevy::asset::Handle;
 use bevy::color::Color;
 use bevy::color::palettes::css;
+use bevy::ecs::children;
 use bevy::ecs::component::HookContext;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
-	Alpha, AudioPlayer, ButtonInput, Circle, Click, ColorMaterial, ContainsEntity,
-	Entity, GlobalTransform, IntoScheduleConfigs, KeyCode, Local, Luminance, Mesh,
-	Mesh2d, MeshMaterial2d, MeshPickingPlugin, OnAdd, OnRemove, Pointer, Pressed,
-	Rectangle, Resource, Saturation, Single, Transform, Trigger, With, Without, World,
-	default,
+	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
+	ContainsEntity, Entity, FlexDirection, GlobalTransform, IntoScheduleConfigs,
+	JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
+	MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer, PositionType, Pressed,
+	Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, With,
+	Without, World, default,
 };
+use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
 use bevy::{
 	DefaultPlugins,
@@ -60,7 +63,13 @@ fn main() {
 		)
 		.add_systems(
 			Update,
-			(despawn, draw_chains, enemy_chainable_graphic).chain(),
+			(
+				despawn,
+				draw_chains,
+				enemy_chainable_graphic,
+				draw_chain_balance,
+			)
+				.chain(),
 		)
 		//.add_systems(Update, animate_sprite)
 		.run();
@@ -119,9 +128,7 @@ fn setup(
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
 }
 
-fn chain_slow_down(
-	mut query: Query<&mut Velocity, With<Chained>>,
-) {
+fn chain_slow_down(mut query: Query<&mut Velocity, With<Chained>>) {
 	for mut v in query.iter_mut() {
 		v.0 *= 1.06;
 	}
@@ -270,6 +277,104 @@ fn move_enemy_2(mut enemy: Query<(&mut Transform, &Velocity)>) {
 #[derive(Resource)]
 pub struct LastEntityChained(pub Entity);
 
+fn draw_chain_balance(mut commands: Commands, chained: Query<&Enemy, With<Chained>>) {
+	let mut greens: i32 = 0;
+	let mut reds: i32 = 0;
+	let mut blues: i32 = 0;
+	for enemy in chained.iter() {
+		let mut val = match enemy.enemy_polarity {
+			EnemyPolarity::Positive => 1,
+			EnemyPolarity::Negative => -1,
+		};
+		match enemy.enemy_color {
+			EnemyColor::Red => reds += val,
+			EnemyColor::Green => greens += val,
+			EnemyColor::Blue => blues += val,
+		}
+	}
+	let e = commands
+		.spawn((
+			Node {
+				// You can change the `Node` however you want at runtime
+				position_type: PositionType::Absolute,
+				width: Val::Percent(100.0),
+				height: Val::Percent(15.0),
+				align_items: AlignItems::Center,
+				justify_content: JustifyContent::Center,
+				flex_direction: FlexDirection::Row,
+				row_gap: Val::Px(20.0),
+				column_gap: Val::Px(20.0),
+				..default()
+			},
+			/*children![
+				Text::new("Press space to change the text below:"),
+				(Text::new(
+					"(no button pressed yet, or this system was reset)"
+				),),
+			],*/
+			Despawn,
+			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
+		))
+		.id();
+	for _ in 0..reds.abs() {
+		let enemy = Enemy {
+			enemy_color: EnemyColor::Red,
+			enemy_polarity: if reds.is_negative() {
+				EnemyPolarity::Negative
+			} else {
+				EnemyPolarity::Positive
+			},
+		};
+		commands.spawn((
+			Node {
+				width: Val::Px(20.0),
+				height: Val::Px(20.0),
+				..default()
+			},
+			BackgroundColor(enemy.into()),
+			ChildOf(e),
+		));
+	}
+	for _ in 0..blues.abs() {
+		let enemy = Enemy {
+			enemy_color: EnemyColor::Blue,
+			enemy_polarity: if blues.is_negative() {
+				EnemyPolarity::Negative
+			} else {
+				EnemyPolarity::Positive
+			},
+		};
+		commands.spawn((
+			Node {
+				width: Val::Px(20.0),
+				height: Val::Px(20.0),
+				..default()
+			},
+			BackgroundColor(enemy.into()),
+			ChildOf(e),
+		));
+	}
+	for _ in 0..greens.abs() {
+		let enemy = Enemy {
+			enemy_color: EnemyColor::Green,
+			enemy_polarity: if greens.is_negative() {
+				EnemyPolarity::Negative
+			} else {
+				EnemyPolarity::Positive
+			},
+		};
+		commands.spawn((
+			Node {
+				width: Val::Px(20.0),
+				height: Val::Px(20.0),
+				..default()
+			},
+			BackgroundColor(enemy.into()),
+			ChildOf(e),
+		));
+	}
+}
+
 fn on_click_enemy(
 	mut trigger: Trigger<Pointer<Pressed>>,
 	mut chained_enemies: Query<&mut Chained>,
@@ -327,7 +432,11 @@ fn on_clickable_removed(
 	let (entity, color, enemy) = query.get(trigger.target()).unwrap();
 	color_materials.get_mut(color).unwrap().color = Color::from(*enemy);
 	if chained.contains(entity) {
-		color_materials.get_mut(color).unwrap().color = color_materials.get_mut(color).unwrap().color.with_saturation(0.2);
+		color_materials.get_mut(color).unwrap().color = color_materials
+			.get_mut(color)
+			.unwrap()
+			.color
+			.with_saturation(0.2);
 	}
 	color_materials.deref_mut();
 }
