@@ -14,11 +14,11 @@ use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
 	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
-	ContainsEntity, Entity, FlexDirection, GlobalTransform, IntoScheduleConfigs,
-	JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
-	MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer, PositionType, Pressed,
-	Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, With,
-	Without, World, default,
+	ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection,
+	GlobalTransform, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance,
+	Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer,
+	PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform,
+	Trigger, Val, With, Without, World, default,
 };
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
@@ -38,6 +38,7 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
+use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
 use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -48,7 +49,9 @@ fn main() {
 		.add_plugins((
 			DefaultPlugins.set(ImagePlugin::default_nearest()),
 			MeshPickingPlugin,
+			bevy_defer::AsyncPlugin::default_settings(),
 		))
+		.add_event::<StartChainReaction>()
 		.add_systems(Startup, setup)
 		.add_systems(
 			Update,
@@ -71,6 +74,7 @@ fn main() {
 			)
 				.chain(),
 		)
+		.add_systems(Update, start_chain_reaction)
 		//.add_systems(Update, animate_sprite)
 		.run();
 }
@@ -110,7 +114,7 @@ fn setup(
 		.id();
 	commands.insert_resource(LastEntityChained(e));
 	commands.entity(e).add_child(child);
-	for x in 0..10 {
+	for x in 0..20 {
 		e = commands
 			.spawn((
 				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
@@ -126,6 +130,66 @@ fn setup(
 	}
 
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
+}
+
+fn start_chain_reaction(
+	event_reader: EventReader<StartChainReaction>,
+	query: Query<(Entity, &Chained)>,
+	player: Single<Entity, With<Player>>,
+	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+	mut res: ResMut<LastEntityChained>,
+) {
+	if event_reader.is_empty() {
+		return;
+	}
+	let mut last_chained_entity = None;
+	for (e, Chained { prev }) in query.iter() {
+		if *prev == *player {
+			last_chained_entity = Some(e);
+		}
+		println!("{}, chained: {}", e, prev);
+	}
+	println!("PLAYER: {}", *player);
+	let Some(mut last_chained_entity) = last_chained_entity else {
+		commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
+		return; // no chained entities at all lol
+	};
+	let mut entities_to_destroy = vec![];
+	loop {
+		entities_to_destroy.push(last_chained_entity);
+		let mut changed = false;
+		for (e, chained) in query.iter() {
+			if chained.prev == last_chained_entity {
+				last_chained_entity = e;
+				changed = true;
+			}
+		}
+		if !changed {
+			break;
+		}
+	}
+	println!("entities to destroy: {:?}", entities_to_destroy);
+	res.0 = *player;
+	commands.spawn_task(move || async {
+		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
+			let sleep_duration = Duration::from_secs_f32(1.0 / 1.5_f32.powf(i as f32));
+			AsyncWorld.sleep(sleep_duration).await;
+			AsyncWorld.run(|world: &mut World| {
+				world
+					.run_system_cached(
+						|mut commands: Commands, asset_server: Res<AssetServer>| {
+							commands.spawn(AudioPlayer::new(
+								asset_server.load("audio/explode.ogg"),
+							));
+						},
+					)
+					.unwrap();
+			});
+			AsyncWorld.entity(entity).despawn();
+		}
+		Ok(())
+	});
 }
 
 fn chain_slow_down(mut query: Query<&mut Velocity, With<Chained>>) {
@@ -193,7 +257,7 @@ fn on_insert_enemy(mut world: DeferredWorld, HookContext { entity, .. }: HookCon
 impl Enemy {
 	pub fn random() -> Enemy {
 		Enemy {
-			enemy_color: EnemyColor::random(),
+			enemy_color: EnemyColor::Red,
 			enemy_polarity: EnemyPolarity::random(),
 		}
 	}
@@ -277,7 +341,16 @@ fn move_enemy_2(mut enemy: Query<(&mut Transform, &Velocity)>) {
 #[derive(Resource)]
 pub struct LastEntityChained(pub Entity);
 
-fn draw_chain_balance(mut commands: Commands, chained: Query<&Enemy, With<Chained>>) {
+#[derive(Event)]
+pub struct StartChainReaction;
+
+fn draw_chain_balance(
+	mut commands: Commands,
+	chained: Query<&Enemy, With<Chained>>,
+	keyboard: Res<ButtonInput<KeyCode>>,
+	asset_server: Res<AssetServer>,
+	mut start_chain_reaction: EventWriter<StartChainReaction>,
+) {
 	let mut greens: i32 = 0;
 	let mut reds: i32 = 0;
 	let mut blues: i32 = 0;
@@ -372,6 +445,13 @@ fn draw_chain_balance(mut commands: Commands, chained: Query<&Enemy, With<Chaine
 			BackgroundColor(enemy.into()),
 			ChildOf(e),
 		));
+	}
+	if keyboard.just_pressed(KeyCode::Space) {
+		if reds == 0 && greens == 0 && blues == 0 {
+			start_chain_reaction.write(StartChainReaction);
+		} else {
+			commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
+		}
 	}
 }
 
@@ -511,8 +591,12 @@ fn draw_chains(
 ) {
 	const CHAIN_SIZE: f32 = 12.0 * 2.5;
 	for (entity, chained) in chained.iter() {
-		let position_1 = positions.get(entity).unwrap();
-		let position_2 = positions.get(chained.prev).unwrap();
+		let Ok(position_1) = positions.get(entity) else {
+			continue;
+		};
+		let Ok(position_2) = positions.get(chained.prev) else {
+			continue;
+		};
 		let delta = position_1.translation() - position_2.translation();
 		// angle in radians around Z‐axis (so sprite “points” from A→B)
 		let angle = delta.y.atan2(delta.x);
