@@ -88,7 +88,7 @@ fn move_enemy(
 ) {
 	for mut e in enemy.iter_mut() {
 		if random!(0.0..1.0) < 0.01 {
-			e.0 = Vec3::new(random!(0.0..1.0), random!(0.0..1.0), 0.0);
+			e.0 = Vec3::new(random!(-1.0..1.0), random!(-1.0..1.0), 0.0);
 		}
 	}
 }
@@ -149,13 +149,21 @@ fn draw_chains(
 		let angle = delta.y.atan2(delta.x);
 		let distance = position_1.translation().distance(position_2.translation());
 		let temp = (distance / CHAIN_SIZE);
-		let distance = (distance / CHAIN_SIZE) as u32;
+		let mut distance = (distance / CHAIN_SIZE) as u32;
 		let remainder = temp - distance as f32;
-		for chain in 0..distance {
+		
+		if distance <= 1 {
+			distance = 2;
+		}
+		for chain in 1..distance {
 			let mut chain = position_1
 				.translation()
 				.lerp(position_2.translation(), (chain as f32 / distance as f32));
 			chain.z = -1.0;
+			let mut size = Vec3::splat(3.0) * ((remainder / distance as f32) + 1.0);
+			if distance <= 2 {
+				size = Vec3::splat(3.0);
+			}
 			commands.spawn((
 				Sprite {
 					image: chain_asset.0.clone(),
@@ -169,7 +177,7 @@ fn draw_chains(
 						PI / 2.0 + angle,
 					))
 					.with_scale(
-						Vec3::splat(3.0) * ((remainder / distance as f32) + 1.0),
+						size
 					),
 				Despawn,
 			));
