@@ -96,7 +96,7 @@ fn setup(
 				materials.add(Color::from(css::CORNFLOWER_BLUE).with_alpha(0.05)),
 			),
 			Mesh2d(meshes.add(Circle::new(DISTANCE_FOR_INTERACTION))),
-			Transform::default(),
+			Transform::from_translation(Vec3::new(0.0, 0.0, -5.0)),
 		))
 		.id();
 	commands.insert_resource(LastEntityChained(e));
@@ -123,7 +123,7 @@ fn chain_slow_down(
 	mut query: Query<&mut Velocity, With<Chained>>,
 ) {
 	for mut v in query.iter_mut() {
-		v.0 *= 1.01;
+		v.0 *= 1.06;
 	}
 }
 
