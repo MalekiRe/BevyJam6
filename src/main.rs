@@ -291,7 +291,7 @@ fn on_click_enemy(
 		chain.prev = enemy;
 	}
 	commands.entity(enemy).insert(Chained { prev: *player });
-
+	commands.entity(enemy).remove::<EnemyClickable>();
 	last_entity_chained.0 = enemy;
 	commands.spawn(AudioPlayer::new(
 		asset_server.load(format!("audio/enemy-attach-{}.ogg", random!(1..5))),
@@ -320,11 +320,15 @@ fn enemy_chainable_graphic(
 
 fn on_clickable_removed(
 	trigger: Trigger<OnRemove, EnemyClickable>,
-	query: Query<(&MeshMaterial2d<ColorMaterial>, &Enemy)>,
+	query: Query<(Entity, &MeshMaterial2d<ColorMaterial>, &Enemy)>,
 	mut color_materials: ResMut<Assets<ColorMaterial>>,
+	chained: Query<&Chained>,
 ) {
-	let (color, enemy) = query.get(trigger.target()).unwrap();
+	let (entity, color, enemy) = query.get(trigger.target()).unwrap();
 	color_materials.get_mut(color).unwrap().color = Color::from(*enemy);
+	if chained.contains(entity) {
+		color_materials.get_mut(color).unwrap().color = color_materials.get_mut(color).unwrap().color.with_saturation(0.2);
+	}
 	color_materials.deref_mut();
 }
 
@@ -332,7 +336,11 @@ fn on_clickable_added(
 	trigger: Trigger<OnAdd, EnemyClickable>,
 	query: Query<(&MeshMaterial2d<ColorMaterial>, &Enemy)>,
 	mut color_materials: ResMut<Assets<ColorMaterial>>,
+	chained: Query<&Chained>,
 ) {
+	if chained.contains(trigger.target()) {
+		return;
+	}
 	let (color, enemy) = query.get(trigger.target()).unwrap();
 	color_materials.get_mut(color).unwrap().color = Color::from(*enemy).lighter(0.1);
 	color_materials.deref_mut();
@@ -392,7 +400,7 @@ fn draw_chains(
 	positions: Query<&GlobalTransform>,
 	chain_asset: Res<ChainAsset>,
 ) {
-	const CHAIN_SIZE: f32 = 12.0 * 3.0;
+	const CHAIN_SIZE: f32 = 12.0 * 2.5;
 	for (entity, chained) in chained.iter() {
 		let position_1 = positions.get(entity).unwrap();
 		let position_2 = positions.get(chained.prev).unwrap();
@@ -403,19 +411,22 @@ fn draw_chains(
 		let temp = (distance / CHAIN_SIZE);
 		let mut distance = (distance / CHAIN_SIZE) as u32;
 		let remainder = temp - distance as f32;
-
-		if distance <= 2 {
-			distance = 3;
+		let mut flag = false;
+		if distance <= 4 {
+			flag = true;
+			distance = 6;
 		}
 		for chain in 1..distance {
 			let mut chain = position_1
 				.translation()
 				.lerp(position_2.translation(), (chain as f32 / distance as f32));
 			chain.z = 1.0;
-			let mut size = Vec3::splat(3.0) * ((remainder / distance as f32) + 1.0);
-			if distance <= 2 {
-				size = Vec3::splat(3.0);
-			}
+			let t = if flag {
+				Vec3::splat(1.8)
+			} else {
+				Vec3::splat(2.5)
+			};
+			let size = t * ((remainder / distance as f32) + 1.0);
 			commands.spawn((
 				Sprite {
 					image: chain_asset.0.clone(),
