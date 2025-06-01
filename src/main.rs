@@ -9,7 +9,7 @@ use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
 	ButtonInput, ColorMaterial, Entity, GlobalTransform, IntoScheduleConfigs, KeyCode,
-	Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Single, Transform, With,
+	Local, Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Single, Transform, With,
 	default,
 };
 use bevy::sprite::SpriteImageMode;
@@ -50,27 +50,27 @@ fn setup(
 	let color: Color = css::ALICE_BLUE.into();
 	let red: Color = css::INDIAN_RED.into();
 	commands.spawn(Camera2d);
-	let mut e = commands.spawn((
-		Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-		MeshMaterial2d(materials.add(red)),
-		Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
-		Player,
-	)).id();
+	let mut e = commands
+		.spawn((
+			Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+			MeshMaterial2d(materials.add(red)),
+			Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
+			Player,
+		))
+		.id();
 	for _ in 0..10 {
 		e = commands
 			.spawn((
 				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
 				MeshMaterial2d(materials.add(color)),
 				Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
-				Chained {
-					prev: e,
-				},
+				Chained { prev: e },
 				Enemy,
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
 			))
 			.id();
 	}
-	
+
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
 }
 
@@ -83,19 +83,15 @@ pub struct Player;
 #[derive(Component)]
 pub struct Velocity(pub Vec3);
 
-fn move_enemy(
-	mut enemy: Query<&mut Velocity, With<Enemy>>,
-) {
+fn move_enemy(mut enemy: Query<&mut Velocity, With<Enemy>>) {
 	for mut e in enemy.iter_mut() {
-		if random!(0.0..1.0) < 0.01 {
+		if random!(0.0..1.0) < 0.001 {
 			e.0 = Vec3::new(random!(-1.0..1.0), random!(-1.0..1.0), 0.0);
 		}
 	}
 }
 
-fn move_enemy_2(
-	mut enemy: Query<(&mut Transform, &Velocity)>,
-) {
+fn move_enemy_2(mut enemy: Query<(&mut Transform, &Velocity)>) {
 	for (mut t, v) in enemy.iter_mut() {
 		t.translation.add_assign(v.0);
 	}
@@ -104,7 +100,12 @@ fn move_enemy_2(
 fn move_player(
 	mut player: Single<&mut Transform, With<Player>>,
 	keyboard: ResMut<ButtonInput<KeyCode>>,
+	mut velocity: Local<Vec3>,
 ) {
+	// Acceleration parameter (units per second^2)
+	const ACCELERATION: f32 = 0.1;
+	const SPEED: f32 = 4.0;
+
 	let mut change = Vec2::default();
 	if keyboard.pressed(KeyCode::KeyA) {
 		change.x -= 1.0;
@@ -118,9 +119,16 @@ fn move_player(
 	if keyboard.pressed(KeyCode::KeyS) {
 		change.y -= 1.0;
 	}
+	let change = change.normalize_or_zero() * SPEED;
+	let change = change.extend(0.0);
+	for _ in 0..2 {
+		*velocity = velocity.lerp(change, ACCELERATION);
+	}
+	if velocity.distance(change) <= 0.1 {
+		*velocity = change;
+	}
 
-	let change = change.normalize_or_zero() * 2.0;
-	player.translation += change.extend(0.0);
+	player.translation += *velocity;
 }
 
 #[derive(Resource, Deref, DerefMut)]
@@ -151,7 +159,7 @@ fn draw_chains(
 		let temp = (distance / CHAIN_SIZE);
 		let mut distance = (distance / CHAIN_SIZE) as u32;
 		let remainder = temp - distance as f32;
-		
+
 		if distance <= 1 {
 			distance = 2;
 		}
@@ -176,9 +184,7 @@ fn draw_chains(
 						0.0,
 						PI / 2.0 + angle,
 					))
-					.with_scale(
-						size
-					),
+					.with_scale(size),
 				Despawn,
 			));
 		}
