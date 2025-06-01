@@ -53,6 +53,7 @@ fn main() {
 				move_player,
 				move_enemy,
 				prevent_enemies_from_collision,
+				chain_slow_down,
 				move_enemy_2,
 				randomly_change_max_internal_velocity,
 			),
@@ -116,6 +117,14 @@ fn setup(
 	}
 
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
+}
+
+fn chain_slow_down(
+	mut query: Query<&mut Velocity, With<Chained>>,
+) {
+	for mut v in query.iter_mut() {
+		v.0 *= 1.01;
+	}
 }
 
 #[derive(Clone, Copy)]
@@ -223,7 +232,7 @@ fn prevent_enemies_from_collision(
 			}
 			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
 				let awa = (p1.translation() - p2.translation()) / 350.0;
-				let awa = awa.lerp(Vec3::default(), 0.8);
+				let awa = awa.lerp(Vec3::default(), 0.6);
 				velocities.get_mut(e1).unwrap().0 += awa;
 				velocities.get_mut(e2).unwrap().0 -= awa;
 			}
@@ -270,6 +279,7 @@ fn on_click_enemy(
 	mut last_entity_chained: ResMut<LastEntityChained>,
 	asset_server: Res<AssetServer>,
 ) {
+	println!("tried click");
 	let Ok(enemy) = enemies.get(trigger.target) else {
 		return;
 	};
@@ -291,7 +301,7 @@ fn on_click_enemy(
 
 #[derive(Component)]
 pub struct EnemyClickable;
-const DISTANCE_FOR_INTERACTION: f32 = 80.0;
+const DISTANCE_FOR_INTERACTION: f32 = 100.0;
 fn enemy_chainable_graphic(
 	mut commands: Commands,
 	enemies: Query<(Entity, &GlobalTransform), With<Enemy>>,
@@ -394,8 +404,8 @@ fn draw_chains(
 		let mut distance = (distance / CHAIN_SIZE) as u32;
 		let remainder = temp - distance as f32;
 
-		if distance <= 1 {
-			distance = 2;
+		if distance <= 2 {
+			distance = 3;
 		}
 		for chain in 1..distance {
 			let mut chain = position_1
