@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::f32::consts::PI;
 use std::ops::{AddAssign, DerefMut, Sub};
 use std::time::Duration;
@@ -11,10 +12,11 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
-	Alpha, ButtonInput, Circle, ColorMaterial, Entity, GlobalTransform,
-	IntoScheduleConfigs, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
-	OnAdd, OnRemove, Rectangle, Resource, Saturation, Single, Transform, Trigger, With,
-	World, default,
+	Alpha, AudioPlayer, ButtonInput, Circle, Click, ColorMaterial, ContainsEntity,
+	Entity, GlobalTransform, IntoScheduleConfigs, KeyCode, Local, Luminance, Mesh,
+	Mesh2d, MeshMaterial2d, MeshPickingPlugin, OnAdd, OnRemove, Pointer, Pressed,
+	Rectangle, Resource, Saturation, Single, Transform, Trigger, With, Without, World,
+	default,
 };
 use bevy::sprite::SpriteImageMode;
 use bevy::{
@@ -40,9 +42,21 @@ use random_number::random;
 
 fn main() {
 	App::new()
-		.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+		.add_plugins((
+			DefaultPlugins.set(ImagePlugin::default_nearest()),
+			MeshPickingPlugin,
+		))
 		.add_systems(Startup, setup)
-		.add_systems(Update, (move_player, move_enemy, move_enemy_2))
+		.add_systems(
+			Update,
+			(
+				move_player,
+				move_enemy,
+				prevent_enemies_from_collision,
+				move_enemy_2,
+				randomly_change_max_internal_velocity,
+			),
+		)
 		.add_systems(
 			Update,
 			(despawn, draw_chains, enemy_chainable_graphic).chain(),
@@ -84,19 +98,20 @@ fn setup(
 			Transform::default(),
 		))
 		.id();
-
+	commands.insert_resource(LastEntityChained(e));
 	commands.entity(e).add_child(child);
-	for _ in 0..10 {
+	for x in 0..10 {
 		e = commands
 			.spawn((
 				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-				Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
-				Chained { prev: e },
+				Transform::from_translation(Vec3::new(x as f32 * 30.0, 30.0, 0.0)),
 				Enemy::random(),
+				MaxInternalVelocity::random(),
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
 			))
 			.observe(on_clickable_added)
 			.observe(on_clickable_removed)
+			.observe(on_click_enemy)
 			.id();
 	}
 
@@ -188,11 +203,52 @@ pub struct Player;
 #[derive(Component)]
 pub struct Velocity(pub Vec3);
 
-fn move_enemy(mut enemy: Query<&mut Velocity, With<Enemy>>) {
-	for mut e in enemy.iter_mut() {
-		if random!(0.0..1.0) < 0.001 {
-			e.0 = Vec3::new(random!(-1.0..1.0), random!(-1.0..1.0), 0.0);
+#[derive(Component)]
+pub struct MaxInternalVelocity(pub f32);
+impl MaxInternalVelocity {
+	pub fn random() -> Self {
+		Self(random!(0.7..1.0))
+	}
+}
+
+fn prevent_enemies_from_collision(
+	enemy_positions: Query<(Entity, &GlobalTransform), With<Enemy>>,
+	mut velocities: Query<&mut Velocity>,
+) {
+	const REPULSION_DISTANCE: f32 = 30.0;
+	for (e1, p1) in enemy_positions.iter() {
+		for (e2, p2) in enemy_positions.iter() {
+			if e2 == e1 {
+				continue;
+			}
+			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
+				let awa = (p1.translation() - p2.translation()) / 350.0;
+				let awa = awa.lerp(Vec3::default(), 0.8);
+				velocities.get_mut(e1).unwrap().0 += awa;
+				velocities.get_mut(e2).unwrap().0 -= awa;
+			}
 		}
+	}
+}
+
+fn randomly_change_max_internal_velocity(mut query: Query<&mut MaxInternalVelocity>) {
+	for mut v in query.iter_mut() {
+		if random!(0.0..1.0) < 0.01 {
+			*v = MaxInternalVelocity::random();
+		}
+	}
+}
+
+fn move_enemy(
+	mut enemy: Query<
+		(&mut Velocity, &GlobalTransform, &MaxInternalVelocity),
+		With<Enemy>,
+	>,
+	player: Single<&GlobalTransform, With<Player>>,
+) {
+	for (mut e, p, v) in enemy.iter_mut() {
+		let n = player.translation() - p.translation();
+		e.0 = e.0.lerp(n.normalize_or_zero() * v.0, 0.1);
 	}
 }
 
@@ -200,6 +256,37 @@ fn move_enemy_2(mut enemy: Query<(&mut Transform, &Velocity)>) {
 	for (mut t, v) in enemy.iter_mut() {
 		t.translation.add_assign(v.0);
 	}
+}
+
+#[derive(Resource)]
+pub struct LastEntityChained(pub Entity);
+
+fn on_click_enemy(
+	mut trigger: Trigger<Pointer<Pressed>>,
+	mut chained_enemies: Query<&mut Chained>,
+	player: Single<Entity, With<Player>>,
+	enemies: Query<Entity, (With<EnemyClickable>, Without<Chained>)>,
+	mut commands: Commands,
+	mut last_entity_chained: ResMut<LastEntityChained>,
+	asset_server: Res<AssetServer>,
+) {
+	let Ok(enemy) = enemies.get(trigger.target) else {
+		return;
+	};
+	trigger.propagate(false);
+	if *player != last_entity_chained.0 {
+		let mut chain = chained_enemies
+			.get_mut(last_entity_chained.0.entity())
+			.unwrap();
+		chain.prev = enemy;
+	}
+	commands.entity(enemy).insert(Chained { prev: *player });
+
+	last_entity_chained.0 = enemy;
+	commands.spawn(AudioPlayer::new(
+		asset_server.load(format!("audio/enemy-attach-{}.ogg", random!(1..5))),
+	));
+	println!("added chain: {}", enemy);
 }
 
 #[derive(Component)]
@@ -314,7 +401,7 @@ fn draw_chains(
 			let mut chain = position_1
 				.translation()
 				.lerp(position_2.translation(), (chain as f32 / distance as f32));
-			chain.z = -1.0;
+			chain.z = 1.0;
 			let mut size = Vec3::splat(3.0) * ((remainder / distance as f32) + 1.0);
 			if distance <= 2 {
 				size = Vec3::splat(3.0);
