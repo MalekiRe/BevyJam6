@@ -1,5 +1,5 @@
 use std::f32::consts::PI;
-use std::ops::{AddAssign, Sub};
+use std::ops::{AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
 use bevy::asset::Handle;
@@ -8,9 +8,9 @@ use bevy::color::palettes::css;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
-	ButtonInput, ColorMaterial, Entity, GlobalTransform, IntoScheduleConfigs, KeyCode,
-	Local, Mesh, Mesh2d, MeshMaterial2d, Rectangle, Resource, Single, Transform, With,
-	default,
+	Alpha, ButtonInput, Circle, ColorMaterial, Entity, GlobalTransform,
+	IntoScheduleConfigs, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
+	OnAdd, OnRemove, Rectangle, Resource, Single, Transform, Trigger, With, default,
 };
 use bevy::sprite::SpriteImageMode;
 use bevy::{
@@ -36,7 +36,10 @@ fn main() {
 		.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
 		.add_systems(Startup, setup)
 		.add_systems(Update, (move_player, move_enemy, move_enemy_2))
-		.add_systems(Update, (despawn, draw_chains).chain())
+		.add_systems(
+			Update,
+			(despawn, draw_chains, enemy_chainable_graphic).chain(),
+		)
 		//.add_systems(Update, animate_sprite)
 		.run();
 }
@@ -47,7 +50,14 @@ fn setup(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-	let color: Color = css::ALICE_BLUE.into();
+	commands.insert_resource(RadiusCircleAsset(
+		MeshMaterial2d(
+			materials.add(Color::from(css::CORNFLOWER_BLUE).with_alpha(0.1)),
+		),
+		Mesh2d(meshes.add(Circle::new(100.0))),
+	));
+
+	let color: Color = css::CORNFLOWER_BLUE.into();
 	let red: Color = css::INDIAN_RED.into();
 	commands.spawn(Camera2d);
 	let mut e = commands
@@ -58,6 +68,17 @@ fn setup(
 			Player,
 		))
 		.id();
+	let child = commands
+		.spawn((
+			MeshMaterial2d(
+				materials.add(Color::from(css::CORNFLOWER_BLUE).with_alpha(0.05)),
+			),
+			Mesh2d(meshes.add(Circle::new(DISTANCE_FOR_INTERACTION))),
+			Transform::default(),
+		))
+		.id();
+
+	commands.entity(e).add_child(child);
 	for _ in 0..10 {
 		e = commands
 			.spawn((
@@ -68,6 +89,8 @@ fn setup(
 				Enemy,
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
 			))
+			.observe(on_clickable_added)
+			.observe(on_clickable_removed)
 			.id();
 	}
 
@@ -95,6 +118,46 @@ fn move_enemy_2(mut enemy: Query<(&mut Transform, &Velocity)>) {
 	for (mut t, v) in enemy.iter_mut() {
 		t.translation.add_assign(v.0);
 	}
+}
+
+#[derive(Component)]
+pub struct EnemyClickable;
+const DISTANCE_FOR_INTERACTION: f32 = 80.0;
+fn enemy_chainable_graphic(
+	mut commands: Commands,
+	enemies: Query<(Entity, &GlobalTransform), With<Enemy>>,
+	player: Single<&GlobalTransform, With<Player>>,
+) {
+	for (enemy_entity, enemy_transform) in enemies.iter() {
+		if player.translation().distance(enemy_transform.translation())
+			<= DISTANCE_FOR_INTERACTION
+		{
+			commands.entity(enemy_entity).insert(EnemyClickable);
+		} else {
+			commands.entity(enemy_entity).remove::<EnemyClickable>();
+		}
+	}
+}
+
+fn on_clickable_removed(
+	trigger: Trigger<OnRemove, EnemyClickable>,
+	query: Query<&MeshMaterial2d<ColorMaterial>>,
+	mut color_materials: ResMut<Assets<ColorMaterial>>,
+) {
+	let color = query.get(trigger.target()).unwrap();
+	color_materials.get_mut(color).unwrap().color = css::CORNFLOWER_BLUE.into();
+	color_materials.deref_mut();
+}
+
+fn on_clickable_added(
+	trigger: Trigger<OnAdd, EnemyClickable>,
+	query: Query<&MeshMaterial2d<ColorMaterial>>,
+	mut color_materials: ResMut<Assets<ColorMaterial>>,
+) {
+	let color = query.get(trigger.target()).unwrap();
+	let c: Color = css::CORNFLOWER_BLUE.into();
+	color_materials.get_mut(color).unwrap().color = c.lighter(0.1);
+	color_materials.deref_mut();
 }
 
 fn move_player(
@@ -133,6 +196,9 @@ fn move_player(
 
 #[derive(Resource, Deref, DerefMut)]
 pub struct ChainAsset(pub Handle<Image>);
+
+#[derive(Resource)]
+pub struct RadiusCircleAsset(pub MeshMaterial2d<ColorMaterial>, pub Mesh2d);
 
 #[derive(Component)]
 pub struct Chained {
