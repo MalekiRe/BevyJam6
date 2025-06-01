@@ -5,12 +5,16 @@ use std::time::Duration;
 use bevy::asset::Handle;
 use bevy::color::Color;
 use bevy::color::palettes::css;
+use bevy::ecs::component::HookContext;
+use bevy::ecs::system::RunSystemOnce;
+use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Vec2, Vec3};
 use bevy::prelude::{
 	Alpha, ButtonInput, Circle, ColorMaterial, Entity, GlobalTransform,
 	IntoScheduleConfigs, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
-	OnAdd, OnRemove, Rectangle, Resource, Single, Transform, Trigger, With, default,
+	OnAdd, OnRemove, Rectangle, Resource, Saturation, Single, Transform, Trigger, With,
+	World, default,
 };
 use bevy::sprite::SpriteImageMode;
 use bevy::{
@@ -29,6 +33,9 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
+use rand::Rng;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 use random_number::random;
 
 fn main() {
@@ -83,10 +90,9 @@ fn setup(
 		e = commands
 			.spawn((
 				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-				MeshMaterial2d(materials.add(color)),
 				Transform::from_translation(Vec3::new(100.0, 30.0, 0.0)),
 				Chained { prev: e },
-				Enemy,
+				Enemy::random(),
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
 			))
 			.observe(on_clickable_added)
@@ -97,8 +103,84 @@ fn setup(
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
 }
 
-#[derive(Component)]
-pub struct Enemy;
+#[derive(Clone, Copy)]
+pub enum EnemyColor {
+	Red,
+	Green,
+	Blue,
+}
+impl EnemyColor {
+	pub fn random() -> Self {
+		match random!(0..3) {
+			0 => Self::Red,
+			1 => Self::Green,
+			2 => Self::Blue,
+			_ => unreachable!(),
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+pub enum EnemyPolarity {
+	Positive,
+	Negative,
+}
+impl EnemyPolarity {
+	pub fn random() -> Self {
+		match random!(0..2) {
+			0 => Self::Positive,
+			1 => Self::Negative,
+			_ => unreachable!(),
+		}
+	}
+}
+
+#[derive(Component, Clone, Copy)]
+#[component(immutable)]
+#[component(on_insert = on_insert_enemy)]
+pub struct Enemy {
+	enemy_color: EnemyColor,
+	enemy_polarity: EnemyPolarity,
+}
+fn on_insert_enemy(mut world: DeferredWorld, HookContext { entity, .. }: HookContext) {
+	world.commands().queue(move |world: &mut World| {
+		world
+			.run_system_once(
+				move |mut commands: Commands,
+				      mut materials: ResMut<Assets<ColorMaterial>>,
+				      enemy: Query<&Enemy>| {
+					let enemy = enemy.get(entity).unwrap();
+					commands
+						.entity(entity)
+						.insert(MeshMaterial2d(materials.add(Color::from(*enemy))));
+				},
+			)
+			.unwrap();
+	});
+}
+
+impl Enemy {
+	pub fn random() -> Enemy {
+		Enemy {
+			enemy_color: EnemyColor::random(),
+			enemy_polarity: EnemyPolarity::random(),
+		}
+	}
+}
+
+impl From<Enemy> for Color {
+	fn from(value: Enemy) -> Self {
+		let color = match value.enemy_color {
+			EnemyColor::Red => Color::from(css::INDIAN_RED),
+			EnemyColor::Green => Color::from(css::FOREST_GREEN),
+			EnemyColor::Blue => Color::from(css::CORNFLOWER_BLUE),
+		};
+		match value.enemy_polarity {
+			EnemyPolarity::Positive => color,
+			EnemyPolarity::Negative => color.darker(0.13).with_saturation(0.6),
+		}
+	}
+}
 
 #[derive(Component)]
 pub struct Player;
@@ -141,22 +223,21 @@ fn enemy_chainable_graphic(
 
 fn on_clickable_removed(
 	trigger: Trigger<OnRemove, EnemyClickable>,
-	query: Query<&MeshMaterial2d<ColorMaterial>>,
+	query: Query<(&MeshMaterial2d<ColorMaterial>, &Enemy)>,
 	mut color_materials: ResMut<Assets<ColorMaterial>>,
 ) {
-	let color = query.get(trigger.target()).unwrap();
-	color_materials.get_mut(color).unwrap().color = css::CORNFLOWER_BLUE.into();
+	let (color, enemy) = query.get(trigger.target()).unwrap();
+	color_materials.get_mut(color).unwrap().color = Color::from(*enemy);
 	color_materials.deref_mut();
 }
 
 fn on_clickable_added(
 	trigger: Trigger<OnAdd, EnemyClickable>,
-	query: Query<&MeshMaterial2d<ColorMaterial>>,
+	query: Query<(&MeshMaterial2d<ColorMaterial>, &Enemy)>,
 	mut color_materials: ResMut<Assets<ColorMaterial>>,
 ) {
-	let color = query.get(trigger.target()).unwrap();
-	let c: Color = css::CORNFLOWER_BLUE.into();
-	color_materials.get_mut(color).unwrap().color = c.lighter(0.1);
+	let (color, enemy) = query.get(trigger.target()).unwrap();
+	color_materials.get_mut(color).unwrap().color = Color::from(*enemy).lighter(0.1);
 	color_materials.deref_mut();
 }
 
