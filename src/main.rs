@@ -1,24 +1,30 @@
+mod explosion;
+
+use std::cmp::max;
 use std::collections::HashSet;
 use std::f32::consts::PI;
+use std::hint::unreachable_unchecked;
 use std::ops::{AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
+use crate::explosion::FireParticleMaterial;
 use bevy::asset::Handle;
 use bevy::color::Color;
 use bevy::color::palettes::css;
 use bevy::ecs::children;
 use bevy::ecs::component::HookContext;
+use bevy::ecs::relationship::OrderedRelationshipSourceCollection;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
-use bevy::math::{EulerRot, Quat, Vec2, Vec3};
+use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
 use bevy::prelude::{
 	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
 	ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection,
-	GlobalTransform, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance,
-	Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer,
-	PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform,
-	Trigger, Val, With, Without, World, default,
+	GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local,
+	Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove,
+	Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text,
+	Transform, Trigger, Val, With, Without, World, default,
 };
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
@@ -39,6 +45,19 @@ use bevy::{
 	time::{Time, Timer, TimerMode},
 };
 use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
+use bevy_ecs_tilemap::map::TilemapId;
+use bevy_ecs_tilemap::prelude::{
+	ArrayTextureLoader, TileBundle, TilePos, TilemapAnchor, TilemapArrayTexture,
+	TilemapSize, TilemapTexture, TilemapTileSize, TilemapType,
+};
+use bevy_ecs_tilemap::tiles::TileStorage;
+use bevy_ecs_tilemap::{TilemapBundle, TilemapPlugin};
+use bevy_enoki::prelude::{
+	OneShot, Particle2dMaterialPlugin, ParticleEffectInstance, ParticleSpawnerState,
+};
+use bevy_enoki::{
+	EnokiPlugin, Particle2dEffect, ParticleEffectHandle, ParticleSpawner,
+};
 use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -50,7 +69,10 @@ fn main() {
 			DefaultPlugins.set(ImagePlugin::default_nearest()),
 			MeshPickingPlugin,
 			bevy_defer::AsyncPlugin::default_settings(),
+			TilemapPlugin,
 		))
+		.add_plugins(EnokiPlugin)
+		.add_plugins(Particle2dMaterialPlugin::<FireParticleMaterial>::default())
 		.add_event::<StartChainReaction>()
 		.add_systems(Startup, setup)
 		.add_systems(
@@ -75,8 +97,69 @@ fn main() {
 				.chain(),
 		)
 		.add_systems(Update, start_chain_reaction)
-		//.add_systems(Update, animate_sprite)
+		.add_systems(Startup, setup_tilemap)
 		.run();
+}
+
+fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
+	let size = IVec2::new(128, 128);
+	let texture_size = UVec2::new(16, 16);
+	
+	let plain = Vec2::new(40.0, 40.0);
+	let grassy = Vec2::new(16.0 * 6.0, 16.0 * 2.0);
+	let grassy2 = Vec2::new(16.0 * 7.0, 16.0 * 2.0);
+	
+	for x in -size.x..size.x {
+		for y in -size.y..size.y {
+			let positions = if random!(0.0..1.0) <= 0.04 {
+				
+				if random!(0.0..1.0) <= 0.8 {
+					match random!(0..8) {
+						0 => Vec2::new(16.0 * 11.0, 16.0 * 2.0),
+						1 => Vec2::new(16.0 * 11.0, 16.0 * 3.0),
+						2 => Vec2::new(16.0 * 11.0, 16.0 * 4.0),
+						3 => Vec2::new(16.0 * 10.0, 16.0 * 4.0),
+						4 => Vec2::new(16.0 * 10.0, 16.0 * 3.0),
+						_ => Vec2::new(16.0 * 10.0, 16.0 * 2.0),		
+					}
+				} else {
+					match random!(0..4) {
+						0 => Vec2::new(16.0 * 9.0, 16.0 * 2.0),
+						1 => Vec2::new(16.0 * 9.0, 16.0 * 1.0),
+						2 => Vec2::new(16.0 * 8.0, 16.0 * 2.0),
+						_ => Vec2::new(16.0 * 8.0, 16.0 * 1.0),
+					}
+				}
+				
+				/*match random!(0..6) {
+					0 => Vec2::new(16.0 * 11.0, 16.0 * 2.0),
+					1 => Vec2::new(16.0 * 10.0, 16.0 * 2.0),
+					//1 => grassy2,
+					2 => Vec2::new(16.0 * 8.0, 16.0 * 2.0),
+					3 => Vec2::new(16.0 * 9.0, 16.0 * 2.0),
+					4 => Vec2::new(16.0 * 8.0, 16.0 * 3.0),
+					5 => Vec2::new(16.0 * 10.0, 16.0 * 3.0),
+					/*6 => Vec2::new(16.0 * 10.0, 16.0 * 4.0),
+					7 => Vec2::new(16.0 * 10.0, 16.0 * 5.0),*/
+					_ => unreachable!(),
+				}*/
+			} else {
+				plain
+			};
+			commands.spawn((
+				Sprite {
+					image: asset_server.load("images/forest_.png"),
+					rect: Some(Rect::new(positions.x, positions.y, positions.x + 16.0, positions.y + 16.0)),
+					..default()
+				},
+				Transform::from_translation(Vec3::new(
+					x as f32 * texture_size.x as f32,
+					y as f32 * texture_size.y as f32,
+					-10.0,
+				)),
+			));
+		}
+	}
 }
 
 fn setup(
@@ -139,6 +222,7 @@ fn start_chain_reaction(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
 	mut res: ResMut<LastEntityChained>,
+	mut materials: ResMut<Assets<FireParticleMaterial>>,
 ) {
 	if event_reader.is_empty() {
 		return;
@@ -170,10 +254,26 @@ fn start_chain_reaction(
 		}
 	}
 	println!("entities to destroy: {:?}", entities_to_destroy);
+
+	// Bodge because my algorithm is bad somehow and is missing some entities
+	for (e, _) in query.iter() {
+		if !entities_to_destroy.contains(&e) {
+			entities_to_destroy.push_back(e);
+		}
+	}
+	let material_handle = materials.add(FireParticleMaterial {
+		texture: asset_server.load("images/noise.png"),
+	});
+
+	commands.spawn(());
+	let awa = asset_server.load_untyped("shaders/ice.particle.ron");
 	res.0 = *player;
 	commands.spawn_task(move || async {
+		let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
-			let sleep_duration = Duration::from_secs_f32(1.0 / 1.5_f32.powf(i as f32));
+			let sleep_duration =
+				Duration::from_secs_f32((0.5 / 1.5_f32.powf(i as f32)).max(0.01));
+
 			AsyncWorld.sleep(sleep_duration).await;
 			AsyncWorld.run(|world: &mut World| {
 				world
@@ -181,6 +281,35 @@ fn start_chain_reaction(
 						|mut commands: Commands, asset_server: Res<AssetServer>| {
 							commands.spawn(AudioPlayer::new(
 								asset_server.load("audio/explode.ogg"),
+							));
+						},
+					)
+					.unwrap();
+			});
+			AsyncWorld.run(move |world: &mut World| {
+				world
+					.run_system_once(
+						move |mut commands: Commands,
+						      particles: Res<Assets<Particle2dEffect>>,
+						      asset_server: Res<AssetServer>,
+						      mut materials: ResMut<Assets<FireParticleMaterial>>,
+						      transforms: Query<&GlobalTransform>,
+						      enemies: Query<&Enemy>| {
+							let material_handle = materials.add(FireParticleMaterial {
+								texture: asset_server.load("images/noise.png"),
+							});
+							let color = Color::from(*enemies.get(entity).unwrap());
+							let mut p = particles
+								.get(asset_server.load("shaders/ice.particle.ron").id())
+								.cloned()
+								.unwrap();
+							p.color.replace(color.into());
+							commands.spawn((
+								ParticleEffectInstance(Some(p)),
+								OneShot::Despawn,
+								ParticleSpawnerState::default(),
+								ParticleSpawner(material_handle),
+								transforms.get(entity).unwrap().compute_transform(),
 							));
 						},
 					)
@@ -257,7 +386,7 @@ fn on_insert_enemy(mut world: DeferredWorld, HookContext { entity, .. }: HookCon
 impl Enemy {
 	pub fn random() -> Enemy {
 		Enemy {
-			enemy_color: EnemyColor::Red,
+			enemy_color: EnemyColor::random(),
 			enemy_polarity: EnemyPolarity::random(),
 		}
 	}
@@ -644,77 +773,3 @@ fn despawn(mut commands: Commands, query: Query<Entity, With<Despawn>>) {
 		commands.entity(entity).despawn();
 	}
 }
-
-/*fn setup(
-	mut commands: Commands,
-	asset_server: Res<AssetServer>,
-	mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
-) {
-	commands.spawn(Camera2d);
-
-	let width = 6;
-	let layout = TextureAtlasLayout::from_grid(
-		// UVec2 { x: 23, y: 27 },
-		UVec2 { x: 33, y: 33 },
-		width,
-		2,
-		None,
-		None,
-	);
-	let texture_atlas_layout = texture_atlas_layouts.add(layout);
-	let run_animation_idx = AnimationIndices::new(width, 1, 0..width);
-	let animation_timer =
-		AnimationTimer(Timer::new(Duration::from_millis(100), TimerMode::Repeating));
-	commands.spawn((
-		Sprite::from_atlas_image(
-			asset_server.load("images/ducky.png"),
-			TextureAtlas {
-				layout: texture_atlas_layout,
-				index: run_animation_idx.first,
-			},
-		),
-		run_animation_idx,
-		animation_timer,
-	));
-}
-
-#[derive(Component)]
-struct AnimationIndices {
-	first: usize,
-	last: usize,
-}
-
-impl AnimationIndices {
-	fn new(width: u32, row: u32, indices: impl Into<std::ops::Range<u32>>) -> Self {
-		let indices: std::ops::Range<u32> = indices.into();
-		let first = row * width + indices.start;
-		let last = first + indices.end - 1;
-
-		Self {
-			first: first as usize,
-			last: last as usize,
-		}
-	}
-}
-
-#[derive(Component, Deref, DerefMut)]
-struct AnimationTimer(Timer);
-
-fn animate_sprite(
-	time: Res<Time>,
-	mut query: Query<(&AnimationIndices, &mut AnimationTimer, &mut Sprite)>,
-) {
-	for (indices, mut timer, mut sprite) in &mut query {
-		timer.tick(time.delta());
-
-		if timer.just_finished() {
-			if let Some(atlas) = &mut sprite.texture_atlas {
-				atlas.index = if atlas.index == indices.last {
-					indices.first
-				} else {
-					atlas.index + 1
-				};
-			}
-		}
-	}
-}*/
