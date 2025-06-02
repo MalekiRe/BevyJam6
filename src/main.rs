@@ -1,4 +1,5 @@
 mod explosion;
+mod player;
 
 use std::cmp::max;
 use std::collections::HashSet;
@@ -8,7 +9,9 @@ use std::ops::{Add, AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
 use crate::explosion::FireParticleMaterial;
+use crate::player::PlayerPlugin;
 use bevy::asset::Handle;
+use bevy::audio::{PlaybackSettings, Volume};
 use bevy::color::Color;
 use bevy::color::palettes::css;
 use bevy::ecs::children;
@@ -18,7 +21,15 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
-use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, With, Without, World, default, Pickable};
+use bevy::prelude::EaseFunction::BounceOut;
+use bevy::prelude::{
+	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
+	ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection,
+	GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local,
+	Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove,
+	Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single,
+	Text, Transform, Trigger, Val, With, Without, World, default,
+};
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
 use bevy::{
@@ -37,8 +48,6 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
-use bevy::audio::{PlaybackSettings, Volume};
-use bevy::prelude::EaseFunction::BounceOut;
 use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
 use bevy_ecs_tilemap::map::TilemapId;
 use bevy_ecs_tilemap::prelude::{
@@ -47,7 +56,10 @@ use bevy_ecs_tilemap::prelude::{
 };
 use bevy_ecs_tilemap::tiles::TileStorage;
 use bevy_ecs_tilemap::{TilemapBundle, TilemapPlugin};
-use bevy_enoki::prelude::{MultiCurve, OneShot, Particle2dMaterialPlugin, ParticleEffectInstance, ParticleSpawnerState, Rval};
+use bevy_enoki::prelude::{
+	MultiCurve, OneShot, Particle2dMaterialPlugin, ParticleEffectInstance,
+	ParticleSpawnerState, Rval,
+};
 use bevy_enoki::{
 	EnokiPlugin, Particle2dEffect, ParticleEffectHandle, ParticleSpawner,
 };
@@ -77,7 +89,7 @@ fn main() {
 				chain_slow_down,
 				move_enemy_2,
 				randomly_change_max_internal_velocity,
-				camera_sync.after(move_player)
+				camera_sync.after(move_player),
 			),
 		)
 		.add_systems(
@@ -92,17 +104,15 @@ fn main() {
 		)
 		.add_systems(Update, start_chain_reaction)
 		.add_systems(Startup, setup_tilemap)
+		.add_plugins(PlayerPlugin)
 		.run();
 }
 
 fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
-
 	let texture_size = UVec2::new(16, 16);
 	let size = IVec2::new(MAP_RADI.x as i32 / 16, MAP_RADI.y as i32 / 16);
 
 	let plain = Vec2::new(40.0, 40.0);
-	let grassy = Vec2::new(16.0 * 6.0, 16.0 * 2.0);
-	let grassy2 = Vec2::new(16.0 * 7.0, 16.0 * 2.0);
 
 	for x in -size.x..size.x {
 		for y in -size.y..size.y {
@@ -171,27 +181,9 @@ fn setup(
 	let color: Color = css::CORNFLOWER_BLUE.into();
 	let red: Color = css::INDIAN_RED.into();
 	commands.spawn(Camera2d);
-	let mut e = commands
-		.spawn((
-			Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
-			MeshMaterial2d(materials.add(red)),
-			Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
-			Player,
-		))
-		.id();
-	let child = commands
-		.spawn((
-			MeshMaterial2d(
-				materials.add(Color::from(css::CORNFLOWER_BLUE).with_alpha(0.05)),
-			),
-			Mesh2d(meshes.add(Circle::new(DISTANCE_FOR_INTERACTION))),
-			Transform::from_translation(Vec3::new(0.0, 0.0, -5.0)),
-		))
-		.id();
-	commands.insert_resource(LastEntityChained(e));
-	commands.entity(e).add_child(child);
+
 	for x in 0..20 {
-		e = commands
+		commands
 			.spawn((
 				Sprite {
 					image: asset_server.load("images/slime.png"),
@@ -207,8 +199,7 @@ fn setup(
 			))
 			.observe(on_clickable_added)
 			.observe(on_clickable_removed)
-			.observe(on_click_enemy)
-			.id();
+			.observe(on_click_enemy);
 	}
 
 	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
@@ -277,12 +268,20 @@ fn start_chain_reaction(
 			AsyncWorld.run(|world: &mut World| {
 				world
 					.run_system_once(
-						move |mut commands: Commands, asset_server: Res<AssetServer>| {
-							commands.spawn((AudioPlayer::new(
-								asset_server.load("audio/slime-squish.ogg"),
-							), PlaybackSettings::ONCE
-								.with_speed(0.9 / (3.0 / 1.1_f32.powf(i as f32)).max(0.3))
-								.with_volume(Volume::default().add(Volume::Linear(2.5)))));
+						move |mut commands: Commands,
+						      asset_server: Res<AssetServer>| {
+							commands.spawn((
+								AudioPlayer::new(
+									asset_server.load("audio/slime-squish.ogg"),
+								),
+								PlaybackSettings::ONCE
+									.with_speed(
+										0.9 / (3.0 / 1.1_f32.powf(i as f32)).max(0.3),
+									)
+									.with_volume(
+										Volume::default().add(Volume::Linear(2.5)),
+									),
+							));
 						},
 					)
 					.unwrap();
@@ -301,30 +300,39 @@ fn start_chain_reaction(
 							});
 							let color = Color::from(*enemies.get(entity).unwrap());
 							commands.spawn((
-								ParticleEffectHandle(asset_server.add(Particle2dEffect {
-									spawn_rate: 0.0,
-									spawn_amount: 50,
-									emission_shape: Default::default(), // Equivalent to Point
-									lifetime: Rval::new(0.3, 0.5),
-									linear_speed: Some(Rval::new(25.0, 25.0)),
-									linear_acceleration: Some(Rval::new(-1.0, -1.5)),
-									direction: Some(Rval::new(Vec2::new(0.1, 0.1), 0.314)),
-									angular_speed: Some(Rval::new(200.0, 300.0)),
-									angular_acceleration: Some(Rval::new(-300.0, -200.0)),
-									gravity_direction: None,
-									gravity_speed: None,
-									scale: Some(Rval::new(0.0, 100.0)),
-									linear_damp: Some(Rval::new(0.8, 20.0)),
-									angular_damp: Some(Rval::new(0.0, 10.0)),
-									scale_curve: Some(MultiCurve {
-										points: vec![
-											(10.0, 0.0, None),
-											(30.0, 1.0, Some(BounceOut)),
-										],
-									}),
-									color: Some(color.into()),
-									color_curve: None,
-								})),
+								ParticleEffectHandle(asset_server.add(
+									Particle2dEffect {
+										spawn_rate: 0.0,
+										spawn_amount: 50,
+										emission_shape: Default::default(), // Equivalent to Point
+										lifetime: Rval::new(0.3, 0.5),
+										linear_speed: Some(Rval::new(25.0, 25.0)),
+										linear_acceleration: Some(Rval::new(
+											-1.0, -1.5,
+										)),
+										direction: Some(Rval::new(
+											Vec2::new(0.1, 0.1),
+											0.314,
+										)),
+										angular_speed: Some(Rval::new(200.0, 300.0)),
+										angular_acceleration: Some(Rval::new(
+											-300.0, -200.0,
+										)),
+										gravity_direction: None,
+										gravity_speed: None,
+										scale: Some(Rval::new(0.0, 100.0)),
+										linear_damp: Some(Rval::new(0.8, 20.0)),
+										angular_damp: Some(Rval::new(0.0, 10.0)),
+										scale_curve: Some(MultiCurve {
+											points: vec![
+												(10.0, 0.0, None),
+												(30.0, 1.0, Some(BounceOut)),
+											],
+										}),
+										color: Some(color.into()),
+										color_curve: None,
+									},
+								)),
 								OneShot::Despawn,
 								ParticleSpawnerState::default(),
 								ParticleSpawner(material_handle),
@@ -586,7 +594,9 @@ fn draw_chain_balance(
 		));
 	}
 	if keyboard.just_pressed(KeyCode::Space) {
-		if /*reds == 0 && greens == 0 && blues == 0*/ true {
+		if
+		/*reds == 0 && greens == 0 && blues == 0*/
+		true {
 			start_chain_reaction.write(StartChainReaction);
 		} else {
 			commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
@@ -709,7 +719,7 @@ fn move_player(
 	if player.translation.x < -MAP_RADI.x + BUFFER {
 		player.translation.x = -MAP_RADI.x + BUFFER;
 	}
-	if player.translation.y > MAP_RADI.y - BUFFER{
+	if player.translation.y > MAP_RADI.y - BUFFER {
 		player.translation.y = MAP_RADI.y - BUFFER;
 	}
 	if player.translation.y < -MAP_RADI.y + BUFFER {
