@@ -4,7 +4,7 @@ use std::cmp::max;
 use std::collections::HashSet;
 use std::f32::consts::PI;
 use std::hint::unreachable_unchecked;
-use std::ops::{AddAssign, DerefMut, Sub};
+use std::ops::{Add, AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
 use crate::explosion::FireParticleMaterial;
@@ -18,14 +18,7 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
-use bevy::prelude::{
-	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
-	ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection,
-	GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local,
-	Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove,
-	Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text,
-	Transform, Trigger, Val, With, Without, World, default,
-};
+use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, With, Without, World, default, Pickable};
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
 use bevy::{
@@ -44,6 +37,8 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
+use bevy::audio::{PlaybackSettings, Volume};
+use bevy::prelude::EaseFunction::BounceOut;
 use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
 use bevy_ecs_tilemap::map::TilemapId;
 use bevy_ecs_tilemap::prelude::{
@@ -52,9 +47,7 @@ use bevy_ecs_tilemap::prelude::{
 };
 use bevy_ecs_tilemap::tiles::TileStorage;
 use bevy_ecs_tilemap::{TilemapBundle, TilemapPlugin};
-use bevy_enoki::prelude::{
-	OneShot, Particle2dMaterialPlugin, ParticleEffectInstance, ParticleSpawnerState,
-};
+use bevy_enoki::prelude::{MultiCurve, OneShot, Particle2dMaterialPlugin, ParticleEffectInstance, ParticleSpawnerState, Rval};
 use bevy_enoki::{
 	EnokiPlugin, Particle2dEffect, ParticleEffectHandle, ParticleSpawner,
 };
@@ -84,6 +77,7 @@ fn main() {
 				chain_slow_down,
 				move_enemy_2,
 				randomly_change_max_internal_velocity,
+				camera_sync.after(move_player)
 			),
 		)
 		.add_systems(
@@ -102,17 +96,17 @@ fn main() {
 }
 
 fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
-	let size = IVec2::new(128, 128);
+
 	let texture_size = UVec2::new(16, 16);
-	
+	let size = IVec2::new(MAP_RADI.x as i32 / 16, MAP_RADI.y as i32 / 16);
+
 	let plain = Vec2::new(40.0, 40.0);
 	let grassy = Vec2::new(16.0 * 6.0, 16.0 * 2.0);
 	let grassy2 = Vec2::new(16.0 * 7.0, 16.0 * 2.0);
-	
+
 	for x in -size.x..size.x {
 		for y in -size.y..size.y {
 			let positions = if random!(0.0..1.0) <= 0.04 {
-				
 				if random!(0.0..1.0) <= 0.8 {
 					match random!(0..8) {
 						0 => Vec2::new(16.0 * 11.0, 16.0 * 2.0),
@@ -120,7 +114,7 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 						2 => Vec2::new(16.0 * 11.0, 16.0 * 4.0),
 						3 => Vec2::new(16.0 * 10.0, 16.0 * 4.0),
 						4 => Vec2::new(16.0 * 10.0, 16.0 * 3.0),
-						_ => Vec2::new(16.0 * 10.0, 16.0 * 2.0),		
+						_ => Vec2::new(16.0 * 10.0, 16.0 * 2.0),
 					}
 				} else {
 					match random!(0..4) {
@@ -130,26 +124,18 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 						_ => Vec2::new(16.0 * 8.0, 16.0 * 1.0),
 					}
 				}
-				
-				/*match random!(0..6) {
-					0 => Vec2::new(16.0 * 11.0, 16.0 * 2.0),
-					1 => Vec2::new(16.0 * 10.0, 16.0 * 2.0),
-					//1 => grassy2,
-					2 => Vec2::new(16.0 * 8.0, 16.0 * 2.0),
-					3 => Vec2::new(16.0 * 9.0, 16.0 * 2.0),
-					4 => Vec2::new(16.0 * 8.0, 16.0 * 3.0),
-					5 => Vec2::new(16.0 * 10.0, 16.0 * 3.0),
-					/*6 => Vec2::new(16.0 * 10.0, 16.0 * 4.0),
-					7 => Vec2::new(16.0 * 10.0, 16.0 * 5.0),*/
-					_ => unreachable!(),
-				}*/
 			} else {
 				plain
 			};
 			commands.spawn((
 				Sprite {
 					image: asset_server.load("images/forest_.png"),
-					rect: Some(Rect::new(positions.x, positions.y, positions.x + 16.0, positions.y + 16.0)),
+					rect: Some(Rect::new(
+						positions.x,
+						positions.y,
+						positions.x + 16.0,
+						positions.y + 16.0,
+					)),
 					..default()
 				},
 				Transform::from_translation(Vec3::new(
@@ -160,6 +146,13 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 			));
 		}
 	}
+}
+
+fn camera_sync(
+	mut camera: Single<&mut Transform, With<Camera2d>>,
+	player: Single<&Transform, (With<Player>, Without<Camera2d>)>,
+) {
+	camera.translation = player.translation;
 }
 
 fn setup(
@@ -200,11 +193,17 @@ fn setup(
 	for x in 0..20 {
 		e = commands
 			.spawn((
-				Mesh2d(meshes.add(Rectangle::new(30.0, 30.0))),
+				Sprite {
+					image: asset_server.load("images/slime.png"),
+					rect: Some(Rect::new(0.0, 16.0, 16.0 * 2.0, 16.0 * 2.0)),
+					//custom_size: Some(Vec2::new(30.0, 30.0)),
+					..default()
+				},
 				Transform::from_translation(Vec3::new(x as f32 * 30.0, 30.0, 0.0)),
 				Enemy::random(),
 				MaxInternalVelocity::random(),
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
+				Pickable::default(),
 			))
 			.observe(on_clickable_added)
 			.observe(on_clickable_removed)
@@ -266,22 +265,24 @@ fn start_chain_reaction(
 	});
 
 	commands.spawn(());
-	let awa = asset_server.load_untyped("shaders/ice.particle.ron");
+	//let awa = asset_server.load_untyped("shaders/ice.particle.ron");
 	res.0 = *player;
 	commands.spawn_task(move || async {
-		let awa = awa;
+		//let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
 			let sleep_duration =
-				Duration::from_secs_f32((0.5 / 1.5_f32.powf(i as f32)).max(0.01));
+				Duration::from_secs_f32((0.5 / 1.2_f32.powf(i as f32)).max(0.05));
 
 			AsyncWorld.sleep(sleep_duration).await;
 			AsyncWorld.run(|world: &mut World| {
 				world
-					.run_system_cached(
-						|mut commands: Commands, asset_server: Res<AssetServer>| {
-							commands.spawn(AudioPlayer::new(
-								asset_server.load("audio/explode.ogg"),
-							));
+					.run_system_once(
+						move |mut commands: Commands, asset_server: Res<AssetServer>| {
+							commands.spawn((AudioPlayer::new(
+								asset_server.load("audio/slime-squish.ogg"),
+							), PlaybackSettings::ONCE
+								.with_speed(0.9 / (3.0 / 1.1_f32.powf(i as f32)).max(0.3))
+								.with_volume(Volume::default().add(Volume::Linear(2.5)))));
 						},
 					)
 					.unwrap();
@@ -299,13 +300,31 @@ fn start_chain_reaction(
 								texture: asset_server.load("images/noise.png"),
 							});
 							let color = Color::from(*enemies.get(entity).unwrap());
-							let mut p = particles
-								.get(asset_server.load("shaders/ice.particle.ron").id())
-								.cloned()
-								.unwrap();
-							p.color.replace(color.into());
 							commands.spawn((
-								ParticleEffectInstance(Some(p)),
+								ParticleEffectHandle(asset_server.add(Particle2dEffect {
+									spawn_rate: 0.0,
+									spawn_amount: 50,
+									emission_shape: Default::default(), // Equivalent to Point
+									lifetime: Rval::new(0.3, 0.5),
+									linear_speed: Some(Rval::new(25.0, 25.0)),
+									linear_acceleration: Some(Rval::new(-1.0, -1.5)),
+									direction: Some(Rval::new(Vec2::new(0.1, 0.1), 0.314)),
+									angular_speed: Some(Rval::new(200.0, 300.0)),
+									angular_acceleration: Some(Rval::new(-300.0, -200.0)),
+									gravity_direction: None,
+									gravity_speed: None,
+									scale: Some(Rval::new(0.0, 100.0)),
+									linear_damp: Some(Rval::new(0.8, 20.0)),
+									angular_damp: Some(Rval::new(0.0, 10.0)),
+									scale_curve: Some(MultiCurve {
+										points: vec![
+											(10.0, 0.0, None),
+											(30.0, 1.0, Some(BounceOut)),
+										],
+									}),
+									color: Some(color.into()),
+									color_curve: None,
+								})),
 								OneShot::Despawn,
 								ParticleSpawnerState::default(),
 								ParticleSpawner(material_handle),
@@ -371,12 +390,9 @@ fn on_insert_enemy(mut world: DeferredWorld, HookContext { entity, .. }: HookCon
 		world
 			.run_system_once(
 				move |mut commands: Commands,
-				      mut materials: ResMut<Assets<ColorMaterial>>,
-				      enemy: Query<&Enemy>| {
-					let enemy = enemy.get(entity).unwrap();
-					commands
-						.entity(entity)
-						.insert(MeshMaterial2d(materials.add(Color::from(*enemy))));
+				      mut enemy: Query<(&mut Sprite, &Enemy)>| {
+					let (mut sprite, enemy) = enemy.get_mut(entity).unwrap();
+					sprite.color = (*enemy).into();
 				},
 			)
 			.unwrap();
@@ -508,12 +524,6 @@ fn draw_chain_balance(
 				column_gap: Val::Px(20.0),
 				..default()
 			},
-			/*children![
-				Text::new("Press space to change the text below:"),
-				(Text::new(
-					"(no button pressed yet, or this system was reset)"
-				),),
-			],*/
 			Despawn,
 			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
 		))
@@ -522,9 +532,9 @@ fn draw_chain_balance(
 		let enemy = Enemy {
 			enemy_color: EnemyColor::Red,
 			enemy_polarity: if reds.is_negative() {
-				EnemyPolarity::Negative
-			} else {
 				EnemyPolarity::Positive
+			} else {
+				EnemyPolarity::Negative
 			},
 		};
 		commands.spawn((
@@ -541,9 +551,9 @@ fn draw_chain_balance(
 		let enemy = Enemy {
 			enemy_color: EnemyColor::Blue,
 			enemy_polarity: if blues.is_negative() {
-				EnemyPolarity::Negative
-			} else {
 				EnemyPolarity::Positive
+			} else {
+				EnemyPolarity::Negative
 			},
 		};
 		commands.spawn((
@@ -560,9 +570,9 @@ fn draw_chain_balance(
 		let enemy = Enemy {
 			enemy_color: EnemyColor::Green,
 			enemy_polarity: if greens.is_negative() {
-				EnemyPolarity::Negative
-			} else {
 				EnemyPolarity::Positive
+			} else {
+				EnemyPolarity::Negative
 			},
 		};
 		commands.spawn((
@@ -576,7 +586,7 @@ fn draw_chain_balance(
 		));
 	}
 	if keyboard.just_pressed(KeyCode::Space) {
-		if reds == 0 && greens == 0 && blues == 0 {
+		if /*reds == 0 && greens == 0 && blues == 0*/ true {
 			start_chain_reaction.write(StartChainReaction);
 		} else {
 			commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
@@ -634,35 +644,29 @@ fn enemy_chainable_graphic(
 
 fn on_clickable_removed(
 	trigger: Trigger<OnRemove, EnemyClickable>,
-	query: Query<(Entity, &MeshMaterial2d<ColorMaterial>, &Enemy)>,
-	mut color_materials: ResMut<Assets<ColorMaterial>>,
+	mut query: Query<(Entity, &mut Sprite, &Enemy)>,
 	chained: Query<&Chained>,
 ) {
-	let (entity, color, enemy) = query.get(trigger.target()).unwrap();
-	color_materials.get_mut(color).unwrap().color = Color::from(*enemy);
+	let (entity, mut sprite, enemy) = query.get_mut(trigger.target()).unwrap();
+	sprite.color = Color::from(*enemy);
 	if chained.contains(entity) {
-		color_materials.get_mut(color).unwrap().color = color_materials
-			.get_mut(color)
-			.unwrap()
-			.color
-			.with_saturation(0.2);
+		sprite.color = sprite.color.with_saturation(0.2);
 	}
-	color_materials.deref_mut();
 }
 
 fn on_clickable_added(
 	trigger: Trigger<OnAdd, EnemyClickable>,
-	query: Query<(&MeshMaterial2d<ColorMaterial>, &Enemy)>,
-	mut color_materials: ResMut<Assets<ColorMaterial>>,
+	mut query: Query<(&mut Sprite, &Enemy)>,
 	chained: Query<&Chained>,
 ) {
 	if chained.contains(trigger.target()) {
 		return;
 	}
-	let (color, enemy) = query.get(trigger.target()).unwrap();
-	color_materials.get_mut(color).unwrap().color = Color::from(*enemy).lighter(0.1);
-	color_materials.deref_mut();
+	let (mut sprite, enemy) = query.get_mut(trigger.target()).unwrap();
+	sprite.color = Color::from(*enemy).lighter(0.1);
 }
+
+const MAP_RADI: Vec2 = Vec2::new(4096.0, 4096.0);
 
 fn move_player(
 	mut player: Single<&mut Transform, With<Player>>,
@@ -696,6 +700,21 @@ fn move_player(
 	}
 
 	player.translation += *velocity;
+
+	const BUFFER: f32 = 1920.0;
+
+	if player.translation.x > MAP_RADI.x - BUFFER {
+		player.translation.x = MAP_RADI.x - BUFFER;
+	}
+	if player.translation.x < -MAP_RADI.x + BUFFER {
+		player.translation.x = -MAP_RADI.x + BUFFER;
+	}
+	if player.translation.y > MAP_RADI.y - BUFFER{
+		player.translation.y = MAP_RADI.y - BUFFER;
+	}
+	if player.translation.y < -MAP_RADI.y + BUFFER {
+		player.translation.y = -MAP_RADI.y + BUFFER;
+	}
 }
 
 #[derive(Resource, Deref, DerefMut)]
@@ -718,7 +737,7 @@ fn draw_chains(
 	positions: Query<&GlobalTransform>,
 	chain_asset: Res<ChainAsset>,
 ) {
-	const CHAIN_SIZE: f32 = 12.0 * 2.5;
+	const CHAIN_SIZE: f32 = 12.0 * 1.5;
 	for (entity, chained) in chained.iter() {
 		let Ok(position_1) = positions.get(entity) else {
 			continue;
@@ -744,9 +763,9 @@ fn draw_chains(
 				.lerp(position_2.translation(), (chain as f32 / distance as f32));
 			chain.z = 1.0;
 			let t = if flag {
-				Vec3::splat(1.8)
+				Vec3::splat(1.1)
 			} else {
-				Vec3::splat(2.5)
+				Vec3::splat(1.5)
 			};
 			let size = t * ((remainder / distance as f32) + 1.0);
 			commands.spawn((
