@@ -111,7 +111,6 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 	let size = IVec2::new(MAP_RADI.x as i32 / 16, MAP_RADI.y as i32 / 16);
 
 	let plain = Vec2::new(40.0, 40.0);
-
 	for x in -size.x..size.x {
 		for y in -size.y..size.y {
 			let positions = if random!(0.0..1.0) <= 0.04 {
@@ -147,8 +146,8 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 					..default()
 				},
 				Transform::from_translation(Vec3::new(
-					x as f32 * texture_size.x as f32,
-					y as f32 * texture_size.y as f32,
+					(x * texture_size.x as i32) as f32,
+					(y * texture_size.y as i32) as f32,
 					-10.0,
 				)),
 			));
@@ -530,6 +529,9 @@ fn draw_chain_balance(
 				column_gap: Val::Px(20.0),
 				..default()
 			},
+			children![
+				Text("Needed to balance: ".to_string())
+			],
 			Despawn,
 			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
 		))
