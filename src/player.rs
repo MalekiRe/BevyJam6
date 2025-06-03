@@ -38,7 +38,7 @@ fn player_animation_player(
 					}
 					PlayerState::Walking(direction) => {
 						match direction {
-							Direction::Right => {
+							Direction::Left => {
 								player.component::<Sprite>().get_mut(|sprite| {
 									*sprite = sprite_sheet.run.clone();
 									sprite.flip_x = true;
@@ -49,6 +49,18 @@ fn player_animation_player(
 									*sprite = sprite_sheet.run.clone();
 								})?;
 							}
+						}
+						for i in 0..8 {
+							if player.component::<PlayerState>().get(|t| match t {
+								PlayerState::Walking(direction2) => *direction2 != direction,
+								_ => true,
+							})? {
+								break 'game_state;
+							}
+							player.component::<Sprite>().get_mut(|sprite| {
+								sprite.texture_atlas.as_mut().unwrap().index = i
+							})?;
+							AsyncWorld.sleep_frames(8).await;
 						}
 					}
 					PlayerState::Attack(_) => {
@@ -123,7 +135,7 @@ fn setup_player_spritesheet(
 				)),
 				index: 0,
 			}),
-            custom_size: Some(Vec2::new(32.0, 32.0)),
+			custom_size: Some(Vec2::new(64.0, 64.0)),
 			..default()
 		},
 		idle: Sprite {
@@ -153,6 +165,7 @@ fn setup_player_spritesheet(
 				)),
 				index: 0,
 			}),
+			custom_size: Some(Vec2::new(64.0, 64.0)),
 			..default()
 		},
 	});

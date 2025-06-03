@@ -9,7 +9,7 @@ use std::ops::{Add, AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
 use crate::explosion::FireParticleMaterial;
-use crate::player::PlayerPlugin;
+use crate::player::{Direction, PlayerPlugin, PlayerState};
 use bevy::asset::Handle;
 use bevy::audio::{PlaybackSettings, Volume};
 use bevy::color::Color;
@@ -680,9 +680,12 @@ const MAP_RADI: Vec2 = Vec2::new(4096.0, 4096.0);
 
 fn move_player(
 	mut player: Single<&mut Transform, With<Player>>,
+	mut player_state: Single<&mut PlayerState>,
 	keyboard: ResMut<ButtonInput<KeyCode>>,
 	mut velocity: Local<Vec3>,
 ) {
+	let mut player_state: &mut PlayerState = &mut player_state;
+	
 	// Acceleration parameter (units per second^2)
 	const ACCELERATION: f32 = 0.1;
 	const SPEED: f32 = 4.0;
@@ -700,8 +703,22 @@ fn move_player(
 	if keyboard.pressed(KeyCode::KeyS) {
 		change.y -= 1.0;
 	}
+	
+	if change.length() != 0.0 && !matches!(*player_state, PlayerState::Attack(_)) {
+		if change.x < 0.0 {
+			*player_state = PlayerState::Walking(Direction::Left);
+		} else {
+			*player_state = PlayerState::Walking(Direction::Right);
+		}
+	}
+	if matches!(*player_state, PlayerState::Walking(_)) && change.length() == 0.0 {
+		*player_state = PlayerState::Idle;
+	}
+	
 	let change = change.normalize_or_zero() * SPEED;
 	let change = change.extend(0.0);
+	
+	
 	for _ in 0..2 {
 		*velocity = velocity.lerp(change, ACCELERATION);
 	}
