@@ -1,6 +1,7 @@
 mod explosion;
 mod music;
 mod player;
+mod enemy;
 
 use std::cmp::max;
 use std::collections::HashSet;
