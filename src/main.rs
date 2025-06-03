@@ -70,6 +70,7 @@ use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use random_number::random;
+use crate::enemy::EnemyPlugin;
 use crate::music::MusicPlugin;
 
 fn main() {
@@ -108,7 +109,7 @@ fn main() {
 		)
 		.add_systems(Update, start_chain_reaction)
 		.add_systems(Startup, setup_tilemap)
-		.add_plugins((PlayerPlugin, MusicPlugin))
+		.add_plugins((PlayerPlugin, MusicPlugin, EnemyPlugin))
 		.run();
 }
 
@@ -182,11 +183,9 @@ fn setup(
 		Mesh2d(meshes.add(Circle::new(100.0))),
 	));
 
-	let color: Color = css::CORNFLOWER_BLUE.into();
-	let red: Color = css::INDIAN_RED.into();
 	commands.spawn(Camera2d);
 
-	for x in 0..20 {
+	/*for x in 0..20 {
 		commands
 			.spawn((
 				Sprite {
@@ -204,7 +203,7 @@ fn setup(
 			.observe(on_clickable_added)
 			.observe(on_clickable_removed)
 			.observe(on_click_enemy);
-	}
+	}*/
 
 	commands.insert_resource(ChainAsset(asset_server.load("images/pink_chain.png")));
 }
@@ -302,7 +301,8 @@ fn start_chain_reaction(
 							let material_handle = materials.add(FireParticleMaterial {
 								texture: asset_server.load("images/noise.png"),
 							});
-							let color = Color::from(*enemies.get(entity).unwrap());
+							let Ok(enemy) = enemies.get(entity) else { return };
+							let color = Color::from(*enemy);
 							commands.spawn((
 								ParticleEffectHandle(asset_server.add(
 									Particle2dEffect {
@@ -346,6 +346,7 @@ fn start_chain_reaction(
 					)
 					.unwrap();
 			});
+			AsyncWorld.sleep_frames(5).await;
 			AsyncWorld.entity(entity).despawn();
 		}
 		Ok(())
@@ -358,7 +359,7 @@ fn chain_slow_down(mut query: Query<&mut Velocity, With<Chained>>) {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum EnemyColor {
 	Red,
 	Green,
@@ -375,7 +376,7 @@ impl EnemyColor {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum EnemyPolarity {
 	Positive,
 	Negative,
@@ -390,7 +391,7 @@ impl EnemyPolarity {
 	}
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug)]
 #[component(immutable)]
 #[component(on_insert = on_insert_enemy)]
 pub struct Enemy {
@@ -598,9 +599,7 @@ fn draw_chain_balance(
 		));
 	}
 	if keyboard.just_pressed(KeyCode::Space) {
-		if
-		/*reds == 0 && greens == 0 && blues == 0*/
-		true {
+		if reds == 0 && greens == 0 && blues == 0 {
 			start_chain_reaction.write(StartChainReaction);
 		} else {
 			commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
@@ -650,7 +649,7 @@ fn on_click_enemy(
 
 #[derive(Component)]
 pub struct EnemyClickable;
-const DISTANCE_FOR_INTERACTION: f32 = 100.0;
+const DISTANCE_FOR_INTERACTION: f32 = 250.0;
 fn enemy_chainable_graphic(
 	mut commands: Commands,
 	enemies: Query<(Entity, &GlobalTransform), With<Enemy>>,
