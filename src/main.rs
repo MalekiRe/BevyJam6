@@ -1,4 +1,5 @@
 mod explosion;
+mod music;
 mod player;
 
 use std::cmp::max;
@@ -68,6 +69,7 @@ use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use random_number::random;
+use crate::music::MusicPlugin;
 
 fn main() {
 	App::new()
@@ -105,7 +107,7 @@ fn main() {
 		)
 		.add_systems(Update, start_chain_reaction)
 		.add_systems(Startup, setup_tilemap)
-		.add_plugins(PlayerPlugin)
+		.add_plugins((PlayerPlugin, MusicPlugin))
 		.run();
 }
 
@@ -203,7 +205,7 @@ fn setup(
 			.observe(on_click_enemy);
 	}
 
-	commands.insert_resource(ChainAsset(asset_server.load("images/chain.png")));
+	commands.insert_resource(ChainAsset(asset_server.load("images/pink_chain.png")));
 }
 
 fn start_chain_reaction(
@@ -280,7 +282,7 @@ fn start_chain_reaction(
 										0.9 / (3.0 / 1.1_f32.powf(i as f32)).max(0.3),
 									)
 									.with_volume(
-										Volume::default().add(Volume::Linear(2.5)),
+										Volume::Linear(5.5),
 									),
 							));
 						},
