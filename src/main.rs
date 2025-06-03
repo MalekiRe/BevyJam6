@@ -24,14 +24,7 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
 use bevy::prelude::EaseFunction::BounceOut;
-use bevy::prelude::{
-	AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial,
-	ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection,
-	GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local,
-	Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove,
-	Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single,
-	Text, Transform, Trigger, Val, Window, With, Without, World, default,
-};
+use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, Window, With, Without, World, default, Over, Out};
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
 use bevy::window::PrimaryWindow;
@@ -423,14 +416,14 @@ impl Enemy {
 
 impl From<Enemy> for Color {
 	fn from(value: Enemy) -> Self {
-		let color = match value.enemy_color {
-			EnemyColor::Red => Color::from(css::INDIAN_RED),
-			EnemyColor::Green => Color::from(css::FOREST_GREEN),
-			EnemyColor::Blue => Color::from(css::CORNFLOWER_BLUE),
-		};
-		match value.enemy_polarity {
-			EnemyPolarity::Positive => color,
-			EnemyPolarity::Negative => color.darker(0.13).with_saturation(0.6),
+		match (value.enemy_color, value.enemy_polarity)
+		{
+			(EnemyColor::Red, EnemyPolarity::Positive) => Color::from(css::INDIAN_RED).lighter(0.03),
+			(EnemyColor::Red, EnemyPolarity::Negative) => Color::from(css::INDIAN_RED).darker(0.16),
+			(EnemyColor::Blue, EnemyPolarity::Positive) => Color::from(css::CORNFLOWER_BLUE).with_saturation(0.98).lighter(0.08),
+			(EnemyColor::Blue, EnemyPolarity::Negative) => Color::from(css::CORNFLOWER_BLUE).darker(0.20).with_saturation(0.98),
+			(EnemyColor::Green, EnemyPolarity::Positive) => Color::from(css::FOREST_GREEN).lighter(0.05).with_saturation(1.01),
+			(EnemyColor::Green, EnemyPolarity::Negative) => Color::from(css::FOREST_GREEN).darker(0.05),
 		}
 	}
 }
@@ -666,27 +659,27 @@ fn enemy_chainable_graphic(
 	}
 }
 
-fn on_clickable_removed(
-	trigger: Trigger<OnRemove, EnemyClickable>,
+fn on_mouse_no_longer_over_enemy(
+	trigger: Trigger<Pointer<Out>>,
 	mut query: Query<(Entity, &mut Sprite, &Enemy)>,
 	chained: Query<&Chained>,
 ) {
 	let (entity, mut sprite, enemy) = query.get_mut(trigger.target()).unwrap();
 	sprite.color = Color::from(*enemy);
-	if chained.contains(entity) {
+	/*if chained.contains(entity) {
 		sprite.color = sprite.color.with_saturation(0.2);
-	}
+	}*/
 }
 
-fn on_clickable_added(
-	trigger: Trigger<OnAdd, EnemyClickable>,
-	mut query: Query<(&mut Sprite, &Enemy)>,
+fn on_mouse_over_enemy(
+	trigger: Trigger<Pointer<Over>>,
+	mut query: Query<(&mut Sprite, &Enemy), With<EnemyClickable>>,
 	chained: Query<&Chained>,
 ) {
 	if chained.contains(trigger.target()) {
 		return;
 	}
-	let (mut sprite, enemy) = query.get_mut(trigger.target()).unwrap();
+	let Ok((mut sprite, enemy)) = query.get_mut(trigger.target()) else { return};
 	sprite.color = Color::from(*enemy).lighter(0.1);
 }
 

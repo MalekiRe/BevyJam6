@@ -2,7 +2,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
 use random_number::random;
-use crate::{on_click_enemy, on_clickable_added, on_clickable_removed, Enemy, MaxInternalVelocity, Player, Velocity, MAP_RADI};
+use crate::{on_click_enemy, on_mouse_over_enemy, on_mouse_no_longer_over_enemy, Enemy, MaxInternalVelocity, Player, Velocity, MAP_RADI};
 
 pub struct EnemyPlugin;
 
@@ -19,7 +19,7 @@ fn spawn_enemy_clusters(
 ) {
     commands.spawn_task(move || async move {
        loop {
-           AsyncWorld.sleep(Duration::new(random!(1..8), 0)).await;
+           AsyncWorld.sleep(Duration::new(random!(1..2), 0)).await;
            let mut enemy_types = vec![Enemy::random()];
            while random!(0.0..1.0) > 0.4 {
                enemy_types.push(Enemy::random());
@@ -72,8 +72,8 @@ fn handle_spawn_enemy(
                 Velocity(Vec3::new(0.0, 0.0, 0.0)),
                 Pickable::default(),
             ))
-            .observe(on_clickable_added)
-            .observe(on_clickable_removed)
+            .observe(on_mouse_over_enemy)
+            .observe(on_mouse_no_longer_over_enemy)
             .observe(on_click_enemy);
     }
 }
