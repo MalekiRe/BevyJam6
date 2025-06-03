@@ -9,7 +9,7 @@ use std::ops::{Add, AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
 use crate::explosion::FireParticleMaterial;
-use crate::player::{Direction, PlayerPlugin, PlayerState};
+use crate::player::{AnimationState, Direction, PlayerPlugin, PlayerState};
 use bevy::asset::Handle;
 use bevy::audio::{PlaybackSettings, Volume};
 use bevy::color::Color;
@@ -28,10 +28,11 @@ use bevy::prelude::{
 	GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local,
 	Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove,
 	Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single,
-	Text, Transform, Trigger, Val, With, Without, World, default,
+	Text, Transform, Trigger, Val, Window, With, Without, World, default,
 };
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
+use bevy::window::PrimaryWindow;
 use bevy::{
 	DefaultPlugins,
 	app::{App, Startup, Update},
@@ -607,12 +608,23 @@ fn draw_chain_balance(
 fn on_click_enemy(
 	mut trigger: Trigger<Pointer<Pressed>>,
 	mut chained_enemies: Query<&mut Chained>,
+	mut player_state: Single<&mut PlayerState>,
+	primary_window: Single<&Window, With<PrimaryWindow>>,
 	player: Single<Entity, With<Player>>,
 	enemies: Query<Entity, (With<EnemyClickable>, Without<Chained>)>,
 	mut commands: Commands,
 	mut last_entity_chained: ResMut<LastEntityChained>,
 	asset_server: Res<AssetServer>,
 ) {
+	player_state.animation_state = AnimationState::Attack;
+	if let Some(cursor_position) = primary_window.cursor_position() {
+		if cursor_position.x - (primary_window.size().x / 2.0) < 0.0 {
+			player_state.direction = Direction::Left;
+		}
+		if cursor_position.x - (primary_window.size().x / 2.0) > 0.0 {
+			player_state.direction = Direction::Right;
+		}
+	}
 	println!("tried click");
 	let Ok(enemy) = enemies.get(trigger.target) else {
 		return;
@@ -685,7 +697,7 @@ fn move_player(
 	mut velocity: Local<Vec3>,
 ) {
 	let mut player_state: &mut PlayerState = &mut player_state;
-	
+
 	// Acceleration parameter (units per second^2)
 	const ACCELERATION: f32 = 0.1;
 	const SPEED: f32 = 4.0;
@@ -703,22 +715,25 @@ fn move_player(
 	if keyboard.pressed(KeyCode::KeyS) {
 		change.y -= 1.0;
 	}
-	
-	if change.length() != 0.0 && !matches!(*player_state, PlayerState::Attack(_)) {
-		if change.x < 0.0 {
-			*player_state = PlayerState::Walking(Direction::Left);
-		} else {
-			*player_state = PlayerState::Walking(Direction::Right);
-		}
+
+	if change.length() != 0.0 && player_state.animation_state != AnimationState::Attack
+	{
+		player_state.animation_state = AnimationState::Walking;
 	}
-	if matches!(*player_state, PlayerState::Walking(_)) && change.length() == 0.0 {
-		*player_state = PlayerState::Idle;
+	if change.length() == 0.0 && player_state.animation_state != AnimationState::Attack
+	{
+		player_state.animation_state = AnimationState::Idle;
 	}
-	
+	if change.x < 0.0 {
+		player_state.direction = Direction::Left
+	}
+	if change.x > 0.0 {
+		player_state.direction = Direction::Right
+	}
+
 	let change = change.normalize_or_zero() * SPEED;
 	let change = change.extend(0.0);
-	
-	
+
 	for _ in 0..2 {
 		*velocity = velocity.lerp(change, ACCELERATION);
 	}
@@ -764,7 +779,7 @@ fn draw_chains(
 	positions: Query<&GlobalTransform>,
 	chain_asset: Res<ChainAsset>,
 ) {
-	const CHAIN_SIZE: f32 = 12.0 * 1.5;
+	const CHAIN_SIZE: f32 = 12.0 * 1.0;
 	for (entity, chained) in chained.iter() {
 		let Ok(position_1) = positions.get(entity) else {
 			continue;
@@ -790,9 +805,9 @@ fn draw_chains(
 				.lerp(position_2.translation(), (chain as f32 / distance as f32));
 			chain.z = 1.0;
 			let t = if flag {
-				Vec3::splat(1.1)
+				Vec3::splat(0.8)
 			} else {
-				Vec3::splat(1.5)
+				Vec3::splat(1.0)
 			};
 			let size = t * ((remainder / distance as f32) + 1.0);
 			commands.spawn((

@@ -5,29 +5,43 @@ use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Startup, (setup_player_spritesheet, setup_player, player_animation_player).chain());
+		app.add_systems(
+			Startup,
+			(
+				setup_player_spritesheet,
+				setup_player,
+				player_animation_player,
+			)
+				.chain(),
+		);
 	}
 }
 
 fn player_animation_player(
-    mut commands: Commands,
+	mut commands: Commands,
 	player: Single<Entity, With<Player>>,
-	player_sprite_sheet: Res<PlayerSpriteSheet>
+	player_sprite_sheet: Res<PlayerSpriteSheet>,
 ) {
-    let player = player.clone();
+	let player = player.clone();
 	let sprite_sheet = player_sprite_sheet.clone();
-    commands.spawn_task(move || async move {
-        let player = AsyncWorld.entity(player);
+	commands.spawn_task(move || async move {
+		let player = AsyncWorld.entity(player);
 		let sprite_sheet = sprite_sheet;
-        loop {
+		loop {
 			'game_state: {
-				match player.component::<PlayerState>().get(|t| t.clone())? {
-					PlayerState::Idle => {
+				let player_state =
+					player.component::<PlayerState>().get(|t| t.clone())?;
+				match player_state.animation_state {
+					AnimationState::Idle => {
 						player.component::<Sprite>().get_mut(|sprite| {
 							*sprite = sprite_sheet.idle.clone();
+							sprite.flip_x = player_state.direction == Direction::Left;
 						})?;
 						for i in 0..4 {
-							if player.component::<PlayerState>().get(|t| *t != PlayerState::Idle)? {
+							if player
+								.component::<PlayerState>()
+								.get(|t| *t != player_state)?
+							{
 								break 'game_state;
 							}
 							player.component::<Sprite>().get_mut(|sprite| {
@@ -36,25 +50,16 @@ fn player_animation_player(
 							AsyncWorld.sleep_frames(16).await;
 						}
 					}
-					PlayerState::Walking(direction) => {
-						match direction {
-							Direction::Left => {
-								player.component::<Sprite>().get_mut(|sprite| {
-									*sprite = sprite_sheet.run.clone();
-									sprite.flip_x = true;
-								})?;
-							}
-							_ => {
-								player.component::<Sprite>().get_mut(|sprite| {
-									*sprite = sprite_sheet.run.clone();
-								})?;
-							}
-						}
+					AnimationState::Walking => {
+						player.component::<Sprite>().get_mut(|sprite| {
+							*sprite = sprite_sheet.run.clone();
+							sprite.flip_x = player_state.direction == Direction::Left;
+						})?;
 						for i in 0..8 {
-							if player.component::<PlayerState>().get(|t| match t {
-								PlayerState::Walking(direction2) => *direction2 != direction,
-								_ => true,
-							})? {
+							if player
+								.component::<PlayerState>()
+								.get(|t| *t != player_state)?
+							{
 								break 'game_state;
 							}
 							player.component::<Sprite>().get_mut(|sprite| {
@@ -63,29 +68,50 @@ fn player_animation_player(
 							AsyncWorld.sleep_frames(8).await;
 						}
 					}
-					PlayerState::Attack(_) => {
-
+					AnimationState::Attack => {
+						player.component::<Sprite>().get_mut(|sprite| {
+							*sprite = sprite_sheet.attack.clone();
+							sprite.flip_x = player_state.direction == Direction::Left;
+						})?;
+						for i in 0..4 {
+							if player
+								.component::<PlayerState>()
+								.get(|t| *t != player_state)?
+							{
+								break 'game_state;
+							}
+							player.component::<Sprite>().get_mut(|sprite| {
+								sprite.texture_atlas.as_mut().unwrap().index = i
+							})?;
+							AsyncWorld.sleep_frames(4).await;
+						}
+						player.component::<PlayerState>().get_mut(|t| {
+							t.animation_state = AnimationState::Idle;
+						})?;
 					}
 				}
 			}
-        }
-    });
+		}
+	});
 }
 
-#[derive(Component, Copy, Clone, Debug, PartialEq, Default)]
-pub enum PlayerState {
-	#[default]
+#[derive(Component, Copy, Clone, Debug, PartialEq)]
+pub struct PlayerState {
+	pub animation_state: AnimationState,
+	pub direction: Direction,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum AnimationState {
 	Idle,
-	Walking(Direction),
-	Attack(Direction),
+	Walking,
+	Attack,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Direction {
 	Left,
 	Right,
-	Up,
-	Down,
 }
 
 #[derive(Resource, Clone)]
@@ -98,7 +124,10 @@ pub struct PlayerSpriteSheet {
 fn setup_player(mut commands: Commands, player_sprite_sheet: Res<PlayerSpriteSheet>) {
 	let e = commands
 		.spawn((
-			PlayerState::Idle,
+			PlayerState {
+				animation_state: AnimationState::Idle,
+				direction: Direction::Right,
+			},
 			Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
 			Player,
 			player_sprite_sheet.idle.clone(),
@@ -131,7 +160,7 @@ fn setup_player_spritesheet(
 					1,
 					8,
 					None,
-                    Some(UVec2::new(48, 0)),
+					Some(UVec2::new(48, 0)),
 				)),
 				index: 0,
 			}),
@@ -145,12 +174,12 @@ fn setup_player_spritesheet(
 					UVec2::new(40, 39),
 					1,
 					5,
-                    None,
+					None,
 					Some(UVec2::new(48, 0)),
 				)),
 				index: 0,
 			}),
-            custom_size: Some(Vec2::new(64.0, 64.0)),
+			custom_size: Some(Vec2::new(64.0, 64.0)),
 			..default()
 		},
 		run: Sprite {
@@ -161,7 +190,7 @@ fn setup_player_spritesheet(
 					1,
 					8,
 					None,
-                    Some(UVec2::new(48, 0)),
+					Some(UVec2::new(48, 0)),
 				)),
 				index: 0,
 			}),
