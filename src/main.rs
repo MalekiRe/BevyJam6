@@ -1,7 +1,8 @@
+mod enemy;
 mod explosion;
 mod music;
 mod player;
-mod enemy;
+mod screen_shake;
 
 use std::cmp::max;
 use std::collections::HashSet;
@@ -10,7 +11,9 @@ use std::hint::unreachable_unchecked;
 use std::ops::{Add, AddAssign, DerefMut, Sub};
 use std::time::Duration;
 
+use crate::enemy::EnemyPlugin;
 use crate::explosion::FireParticleMaterial;
+use crate::music::MusicPlugin;
 use crate::player::{AnimationState, Direction, PlayerPlugin, PlayerState};
 use bevy::asset::Handle;
 use bevy::audio::{PlaybackSettings, Volume};
@@ -24,7 +27,7 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
 use bevy::prelude::EaseFunction::BounceOut;
-use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, Window, With, Without, World, default, Over, Out};
+use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Out, Over, Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, Window, With, Without, World, default, Camera, OrthographicProjection};
 use bevy::prelude::{BackgroundColor, SpawnRelated};
 use bevy::sprite::SpriteImageMode;
 use bevy::window::PrimaryWindow;
@@ -44,6 +47,8 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
+use bevy::render::camera::{CameraProjection, SubCameraView};
+use bevy::render::primitives::Frustum;
 use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
 use bevy_ecs_tilemap::map::TilemapId;
 use bevy_ecs_tilemap::prelude::{
@@ -51,7 +56,7 @@ use bevy_ecs_tilemap::prelude::{
 	TilemapSize, TilemapTexture, TilemapTileSize, TilemapType,
 };
 use bevy_ecs_tilemap::tiles::TileStorage;
-use bevy_ecs_tilemap::{TilemapBundle, TilemapPlugin};
+use bevy_ecs_tilemap::{FrustumCulling, TilemapBundle, TilemapPlugin};
 use bevy_enoki::prelude::{
 	MultiCurve, OneShot, Particle2dMaterialPlugin, ParticleEffectInstance,
 	ParticleSpawnerState, Rval,
@@ -63,8 +68,7 @@ use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use random_number::random;
-use crate::enemy::EnemyPlugin;
-use crate::music::MusicPlugin;
+use crate::screen_shake::{ScreenShakePlugin, SlimeDestroyed};
 
 fn main() {
 	App::new()
@@ -102,7 +106,7 @@ fn main() {
 		)
 		.add_systems(Update, start_chain_reaction)
 		.add_systems(Startup, setup_tilemap)
-		.add_plugins((PlayerPlugin, MusicPlugin, EnemyPlugin))
+		.add_plugins((PlayerPlugin, MusicPlugin, EnemyPlugin, ScreenShakePlugin))
 		.run();
 }
 
@@ -174,8 +178,22 @@ fn setup(
 		),
 		Mesh2d(meshes.add(Circle::new(100.0))),
 	));
-
-	commands.spawn(Camera2d);
+	
+	commands.spawn((
+		Camera2d,
+		Camera {
+			sub_camera_view: Some(SubCameraView {
+				full_size: UVec2::new(1920, 1080),
+				offset: Vec2::new(640.0, 0.0),
+				size: UVec2::new(1280, 720),
+			}),
+			order: 1,
+			..default()
+		},
+		OrthographicProjection::default_2d().compute_frustum(&GlobalTransform::from(Transform::default().with_scale(Vec3::splat(1.5)))),
+		FrustumCulling(false),
+	));
+	
 
 	/*for x in 0..20 {
 		commands
@@ -256,6 +274,7 @@ fn start_chain_reaction(
 	commands.spawn_task(move || async {
 		//let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
+			AsyncWorld.send_event(SlimeDestroyed)?;
 			let sleep_duration =
 				Duration::from_secs_f32((0.5 / 1.2_f32.powf(i as f32)).max(0.05));
 
@@ -273,9 +292,7 @@ fn start_chain_reaction(
 									.with_speed(
 										0.9 / (3.0 / 1.1_f32.powf(i as f32)).max(0.3),
 									)
-									.with_volume(
-										Volume::Linear(5.5),
-									),
+									.with_volume(Volume::Linear(5.5)),
 							));
 						},
 					)
@@ -293,7 +310,9 @@ fn start_chain_reaction(
 							let material_handle = materials.add(FireParticleMaterial {
 								texture: asset_server.load("images/noise.png"),
 							});
-							let Ok(enemy) = enemies.get(entity) else { return };
+							let Ok(enemy) = enemies.get(entity) else {
+								return;
+							};
 							let color = Color::from(*enemy);
 							commands.spawn((
 								ParticleEffectHandle(asset_server.add(
@@ -415,14 +434,31 @@ impl Enemy {
 
 impl From<Enemy> for Color {
 	fn from(value: Enemy) -> Self {
-		match (value.enemy_color, value.enemy_polarity)
-		{
-			(EnemyColor::Red, EnemyPolarity::Positive) => Color::from(css::INDIAN_RED).lighter(0.03),
-			(EnemyColor::Red, EnemyPolarity::Negative) => Color::from(css::INDIAN_RED).darker(0.16),
-			(EnemyColor::Blue, EnemyPolarity::Positive) => Color::from(css::CORNFLOWER_BLUE).with_saturation(0.98).lighter(0.08),
-			(EnemyColor::Blue, EnemyPolarity::Negative) => Color::from(css::CORNFLOWER_BLUE).darker(0.20).with_saturation(0.98),
-			(EnemyColor::Green, EnemyPolarity::Positive) => Color::from(css::FOREST_GREEN).lighter(0.05).with_saturation(1.01),
-			(EnemyColor::Green, EnemyPolarity::Negative) => Color::from(css::FOREST_GREEN).darker(0.05),
+		match (value.enemy_color, value.enemy_polarity) {
+			(EnemyColor::Red, EnemyPolarity::Positive) => {
+				Color::from(css::INDIAN_RED).lighter(0.03)
+			}
+			(EnemyColor::Red, EnemyPolarity::Negative) => {
+				Color::from(css::INDIAN_RED).darker(0.16)
+			}
+			(EnemyColor::Blue, EnemyPolarity::Positive) => {
+				Color::from(css::CORNFLOWER_BLUE)
+					.with_saturation(0.98)
+					.lighter(0.08)
+			}
+			(EnemyColor::Blue, EnemyPolarity::Negative) => {
+				Color::from(css::CORNFLOWER_BLUE)
+					.darker(0.20)
+					.with_saturation(0.98)
+			}
+			(EnemyColor::Green, EnemyPolarity::Positive) => {
+				Color::from(css::FOREST_GREEN)
+					.lighter(0.05)
+					.with_saturation(1.01)
+			}
+			(EnemyColor::Green, EnemyPolarity::Negative) => {
+				Color::from(css::FOREST_GREEN).darker(0.05)
+			}
 		}
 	}
 }
@@ -529,9 +565,7 @@ fn draw_chain_balance(
 				column_gap: Val::Px(20.0),
 				..default()
 			},
-			children![
-				Text("Needed to balance: ".to_string())
-			],
+			children![Text("Needed to balance: ".to_string())],
 			Despawn,
 			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
 		))
@@ -681,7 +715,9 @@ fn on_mouse_over_enemy(
 	if chained.contains(trigger.target()) {
 		return;
 	}
-	let Ok((mut sprite, enemy)) = query.get_mut(trigger.target()) else { return};
+	let Ok((mut sprite, enemy)) = query.get_mut(trigger.target()) else {
+		return;
+	};
 	sprite.color = Color::from(*enemy).lighter(0.1);
 }
 
