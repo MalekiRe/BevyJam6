@@ -1,21 +1,25 @@
+use crate::menus::GameState;
 use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 const CAMERA_DECAY_RATE: f32 = 0.95; // Adjust this for smoother or snappier decay
-const TRAUMA_DECAY_SPEED: f32 = 0.5; // How fast trauma decays
-const TRAUMA_INCREMENT: f32 = 19.0; // Increment of trauma per frame when holding space
+const TRAUMA_DECAY_SPEED: f32 = 1.2; // How fast trauma decays
+const TRAUMA_INCREMENT: f32 = 20.0; // Increment of trauma per frame when holding space
 
 // screen_shake parameters, maximum addition by frame not actual maximum overall values
-const MAX_ANGLE: f32 = 0.5;
-const MAX_OFFSET: f32 = 500.0;
+const MAX_ANGLE: f32 = 1.5;
+const MAX_OFFSET: f32 = 800.0;
 
 pub struct ScreenShakePlugin;
 impl Plugin for ScreenShakePlugin {
 	fn build(&self, app: &mut App) {
-        app.add_event::<SlimeDestroyed>();
-        app.init_resource::<ScreenShake>();
-		app.add_systems(Update, (screen_shake, trigger_shake_on_space));
+		app.add_event::<SlimeDestroyed>();
+		app.init_resource::<ScreenShake>();
+		app.add_systems(
+			Update,
+			(screen_shake, trigger_shake_on_space).run_if(in_state(GameState::Game)),
+		);
 	}
 }
 
@@ -107,7 +111,8 @@ fn screen_shake(
 		// return camera to the latest position of player (it's fixed in this example case)
 		if let Ok((mut camera, mut transform)) = query.single_mut() {
 			let sub_view = camera.sub_camera_view.as_mut().unwrap();
-			let target = screen_shake.latest_position.unwrap() + Vec2::new(620.0 / 2.0, (1080.0 - 720.0) / 2.0);
+			let target = screen_shake.latest_position.unwrap()
+				+ Vec2::new(620.0 / 2.0, (1080.0 - 720.0) / 2.0);
 			sub_view
 				.offset
 				.smooth_nudge(&target, 1.0, time.delta_secs());

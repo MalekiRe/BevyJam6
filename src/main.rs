@@ -1,8 +1,11 @@
 mod enemy;
 mod explosion;
+mod menus;
 mod music;
 mod player;
 mod screen_shake;
+mod text_combo;
+mod theme;
 
 use std::cmp::max;
 use std::collections::HashSet;
@@ -13,8 +16,11 @@ use std::time::Duration;
 
 use crate::enemy::EnemyPlugin;
 use crate::explosion::FireParticleMaterial;
+use crate::menus::{GameState, PauseMenu};
 use crate::music::MusicPlugin;
 use crate::player::{AnimationState, Direction, PlayerPlugin, PlayerState};
+use crate::screen_shake::{ScreenShakePlugin, SlimeDestroyed};
+use crate::text_combo::{TextCombo, TextComboPlugin};
 use bevy::asset::Handle;
 use bevy::audio::{PlaybackSettings, Volume};
 use bevy::color::Color;
@@ -27,8 +33,19 @@ use bevy::ecs::world::DeferredWorld;
 use bevy::image::Image;
 use bevy::math::{EulerRot, Quat, Rect, Vec2, Vec3};
 use bevy::prelude::EaseFunction::BounceOut;
-use bevy::prelude::{AlignItems, Alpha, AudioPlayer, ButtonInput, ChildOf, Circle, Click, ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter, FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d, MeshPickingPlugin, Node, OnAdd, OnRemove, Out, Over, Pickable, Pointer, PositionType, Pressed, Rectangle, Resource, Saturation, Single, Text, Transform, Trigger, Val, Window, With, Without, World, default, Camera, OrthographicProjection};
+use bevy::prelude::{
+	AlignItems, Alpha, AudioPlayer, ButtonInput, Camera, ChildOf, Circle, Click,
+	ColorMaterial, ContainsEntity, Entity, Event, EventReader, EventWriter,
+	FlexDirection, GlobalTransform, IVec2, IntoScheduleConfigs, JustifyContent,
+	JustifyText, KeyCode, Local, Luminance, Mesh, Mesh2d, MeshMaterial2d,
+	MeshPickingPlugin, Mut, Node, OnAdd, OnEnter, OnRemove, OrthographicProjection,
+	Out, Over, Pickable, Plugin, Pointer, PositionType, Pressed, Rectangle, Resource,
+	Saturation, Single, StateScoped, Text, Text2d, TextLayout, Transform, Trigger, Val,
+	Window, With, Without, World, default, in_state,
+};
 use bevy::prelude::{BackgroundColor, SpawnRelated};
+use bevy::render::camera::{CameraProjection, SubCameraView};
+use bevy::render::primitives::Frustum;
 use bevy::sprite::SpriteImageMode;
 use bevy::window::PrimaryWindow;
 use bevy::{
@@ -47,9 +64,7 @@ use bevy::{
 	sprite::Sprite,
 	time::{Time, Timer, TimerMode},
 };
-use bevy::render::camera::{CameraProjection, SubCameraView};
-use bevy::render::primitives::Frustum;
-use bevy_defer::{AsyncCommandsExtension, AsyncWorld};
+use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
 use bevy_ecs_tilemap::map::TilemapId;
 use bevy_ecs_tilemap::prelude::{
 	ArrayTextureLoader, TileBundle, TilePos, TilemapAnchor, TilemapArrayTexture,
@@ -68,7 +83,6 @@ use rand::Rng;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use random_number::random;
-use crate::screen_shake::{ScreenShakePlugin, SlimeDestroyed};
 
 fn main() {
 	App::new()
@@ -76,37 +90,18 @@ fn main() {
 			DefaultPlugins.set(ImagePlugin::default_nearest()),
 			MeshPickingPlugin,
 			bevy_defer::AsyncPlugin::default_settings(),
-			TilemapPlugin,
+			menus::MenuPlugins,
 		))
 		.add_plugins(EnokiPlugin)
 		.add_plugins(Particle2dMaterialPlugin::<FireParticleMaterial>::default())
-		.add_event::<StartChainReaction>()
-		.add_systems(Startup, setup)
-		.add_systems(
-			Update,
-			(
-				move_player,
-				move_enemy,
-				prevent_enemies_from_collision,
-				chain_slow_down,
-				move_enemy_2,
-				randomly_change_max_internal_velocity,
-				camera_sync.after(move_player),
-			),
-		)
-		.add_systems(
-			Update,
-			(
-				despawn,
-				draw_chains,
-				enemy_chainable_graphic,
-				draw_chain_balance,
-			)
-				.chain(),
-		)
-		.add_systems(Update, start_chain_reaction)
-		.add_systems(Startup, setup_tilemap)
-		.add_plugins((PlayerPlugin, MusicPlugin, EnemyPlugin, ScreenShakePlugin))
+		.add_plugins((
+			PlayerPlugin,
+			MusicPlugin,
+			EnemyPlugin,
+			ScreenShakePlugin,
+			TextComboPlugin,
+			MainGamePlugin,
+		))
 		.run();
 }
 
@@ -154,6 +149,7 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 					(y * texture_size.y as i32) as f32,
 					-10.0,
 				)),
+				StateScoped(GameState::Game),
 			));
 		}
 	}
@@ -164,6 +160,43 @@ fn camera_sync(
 	player: Single<&Transform, (With<Player>, Without<Camera2d>)>,
 ) {
 	camera.translation = player.translation;
+}
+
+pub struct MainGamePlugin;
+impl Plugin for MainGamePlugin {
+	fn build(&self, app: &mut App) {
+		app.add_event::<StartChainReaction>()
+			.add_systems(OnEnter(GameState::Game), setup)
+			.init_resource::<Score>()
+			.add_systems(
+				Update,
+				(
+					move_player,
+					move_enemy,
+					prevent_enemies_from_collision,
+					chain_slow_down,
+					move_enemy_2,
+					randomly_change_max_internal_velocity,
+					camera_sync.after(move_player),
+				)
+					.run_if(in_state(GameState::Game))
+					.run_if(in_state(PauseMenu::Unpaused)),
+			)
+			.add_systems(
+				Update,
+				(
+					despawn,
+					(draw_chains, enemy_chainable_graphic, draw_chain_balance)
+						.run_if(in_state(GameState::Game)),
+				)
+					.chain(),
+			)
+			.add_systems(
+				Update,
+				start_chain_reaction.run_if(in_state(GameState::Game)),
+			)
+			.add_systems(OnEnter(GameState::Game), setup_tilemap);
+	}
 }
 
 fn setup(
@@ -178,7 +211,7 @@ fn setup(
 		),
 		Mesh2d(meshes.add(Circle::new(100.0))),
 	));
-	
+
 	commands.spawn((
 		Camera2d,
 		Camera {
@@ -190,30 +223,12 @@ fn setup(
 			order: 1,
 			..default()
 		},
-		OrthographicProjection::default_2d().compute_frustum(&GlobalTransform::from(Transform::default().with_scale(Vec3::splat(1.5)))),
+		OrthographicProjection::default_2d().compute_frustum(&GlobalTransform::from(
+			Transform::default().with_scale(Vec3::splat(1.5)),
+		)),
 		FrustumCulling(false),
+		StateScoped(GameState::Game),
 	));
-	
-
-	/*for x in 0..20 {
-		commands
-			.spawn((
-				Sprite {
-					image: asset_server.load("images/slime.png"),
-					rect: Some(Rect::new(0.0, 16.0, 16.0 * 2.0, 16.0 * 2.0)),
-					//custom_size: Some(Vec2::new(30.0, 30.0)),
-					..default()
-				},
-				Transform::from_translation(Vec3::new(x as f32 * 30.0, 30.0, 0.0)),
-				Enemy::random(),
-				MaxInternalVelocity::random(),
-				Velocity(Vec3::new(0.0, 0.0, 0.0)),
-				Pickable::default(),
-			))
-			.observe(on_clickable_added)
-			.observe(on_clickable_removed)
-			.observe(on_click_enemy);
-	}*/
 
 	commands.insert_resource(ChainAsset(asset_server.load("images/pink_chain.png")));
 }
@@ -237,7 +252,7 @@ fn start_chain_reaction(
 		}
 		println!("{}, chained: {}", e, prev);
 	}
-	println!("PLAYER: {}", *player);
+
 	let Some(mut last_chained_entity) = last_chained_entity else {
 		commands.spawn(AudioPlayer::new(asset_server.load("audio/error.ogg")));
 		return; // no chained entities at all lol
@@ -272,6 +287,7 @@ fn start_chain_reaction(
 	//let awa = asset_server.load_untyped("shaders/ice.particle.ron");
 	res.0 = *player;
 	commands.spawn_task(move || async {
+		let mut combo = 1;
 		//let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
 			AsyncWorld.send_event(SlimeDestroyed)?;
@@ -358,11 +374,27 @@ fn start_chain_reaction(
 					.unwrap();
 			});
 			AsyncWorld.sleep_frames(5).await;
+			AsyncWorld.spawn_bundle((
+				AsyncWorld
+					.entity(entity)
+					.query::<&Transform>()
+					.get(|a| a.clone())?,
+				Text2d::new(combo.to_string()),
+				TextLayout::new_with_justify(JustifyText::Center),
+				TextCombo,
+			));
 			AsyncWorld.entity(entity).despawn();
+			combo += 2;
 		}
+		AsyncWorld.resource_scope(|mut score: Mut<Score>| {
+			score.0 += combo;
+		});
 		Ok(())
 	});
 }
+
+#[derive(Event)]
+pub struct AddToScore(u32);
 
 fn chain_slow_down(mut query: Query<&mut Velocity, With<Chained>>) {
 	for mut v in query.iter_mut() {
@@ -530,12 +562,16 @@ pub struct LastEntityChained(pub Entity);
 #[derive(Event)]
 pub struct StartChainReaction;
 
+#[derive(Resource, Default)]
+pub struct Score(u32);
+
 fn draw_chain_balance(
 	mut commands: Commands,
 	chained: Query<&Enemy, With<Chained>>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	asset_server: Res<AssetServer>,
 	mut start_chain_reaction: EventWriter<StartChainReaction>,
+	score: Res<Score>,
 ) {
 	let mut greens: i32 = 0;
 	let mut reds: i32 = 0;
@@ -551,6 +587,7 @@ fn draw_chain_balance(
 			EnemyColor::Blue => blues += val,
 		}
 	}
+
 	let e = commands
 		.spawn((
 			Node {
@@ -560,16 +597,37 @@ fn draw_chain_balance(
 				height: Val::Percent(15.0),
 				align_items: AlignItems::Center,
 				justify_content: JustifyContent::Center,
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(20.0),
+				column_gap: Val::Px(20.0),
+				..default()
+			},
+			children![
+				Text(format!("Score: {}  ", score.0)),
+				Text("Needed to balance: ".to_string()),
+			],
+			Despawn,
+			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
+		))
+		.id();
+	let sub_node = commands
+		.spawn((
+			Node {
+				// You can change the `Node` however you want at runtime
+				position_type: PositionType::Relative,
+				align_items: AlignItems::Center,
+				justify_content: JustifyContent::Center,
 				flex_direction: FlexDirection::Row,
 				row_gap: Val::Px(20.0),
 				column_gap: Val::Px(20.0),
 				..default()
 			},
-			children![Text("Needed to balance: ".to_string())],
-			Despawn,
-			Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
+			Transform::from_translation(Vec3::new(0.0, -150.0, 0.0)),
+			ChildOf(e),
 		))
 		.id();
+	//commands.entity(e).add_child(sub_node);
+	let e = sub_node;
 	for _ in 0..reds.abs() {
 		let enemy = Enemy {
 			enemy_color: EnemyColor::Red,

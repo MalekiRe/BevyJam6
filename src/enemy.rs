@@ -1,8 +1,10 @@
+use crate::menus::GameState;
 use crate::{
 	Enemy, MAP_RADI, MaxInternalVelocity, Player, Velocity, on_click_enemy,
 	on_mouse_no_longer_over_enemy, on_mouse_over_enemy,
 };
 use bevy::prelude::*;
+use bevy::tasks::futures_lite::StreamExt;
 use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
 use random_number::random;
 use std::time::Duration;
@@ -13,14 +15,20 @@ impl Plugin for EnemyPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_event::<SpawnEnemy>();
 		app.add_systems(Startup, spawn_enemy_clusters);
-		app.add_systems(Update, handle_spawn_enemy);
+		app.add_systems(Update, handle_spawn_enemy.run_if(in_state(GameState::Game)));
 	}
 }
 
 fn spawn_enemy_clusters(mut commands: Commands) {
 	commands.spawn_task(move || async move {
 		loop {
+			AsyncWorld.in_state(GameState::Game).await;
 			AsyncWorld.sleep(Duration::new(random!(1..2), 0)).await;
+			if !AsyncWorld.resource_scope(|state: Mut<State<GameState>>| {
+				state.get() == &GameState::Game
+			}) {
+				continue;
+			}
 			let mut enemy_types = vec![Enemy::random()];
 			while random!(0.0..1.0) > 0.4 {
 				enemy_types.push(Enemy::random());
@@ -37,6 +45,11 @@ fn spawn_enemy_clusters(mut commands: Commands) {
 			let t = AsyncWorld
 				.query_filtered::<&mut Transform, With<Player>>()
 				.single();
+			if !AsyncWorld.resource_scope(|state: Mut<State<GameState>>| {
+				state.get() == &GameState::Game
+			}) {
+				continue;
+			}
 			let t = t.get_mut(|a| a.clone())?;
 			let starting_position =
 				starting_position * Vec2::splat(1000.0) + t.translation.xy();
@@ -67,7 +80,6 @@ fn handle_spawn_enemy(
 	asset_server: Res<AssetServer>,
 ) {
 	for spawn_enemy in spawn_enemy.read() {
-		println!("spawning enemy at: {:#?}", spawn_enemy);
 		commands
 			.spawn((
 				Sprite {
@@ -84,6 +96,7 @@ fn handle_spawn_enemy(
 				MaxInternalVelocity::random(),
 				Velocity(Vec3::new(0.0, 0.0, 0.0)),
 				Pickable::default(),
+				StateScoped(GameState::Game),
 			))
 			.observe(on_mouse_over_enemy)
 			.observe(on_mouse_no_longer_over_enemy)

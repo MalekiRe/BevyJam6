@@ -1,3 +1,4 @@
+use crate::menus::GameState;
 use crate::{LastEntityChained, Player};
 use bevy::prelude::*;
 use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
@@ -6,7 +7,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_systems(
-			Startup,
+			OnEnter(GameState::Game),
 			(
 				setup_player_spritesheet,
 				setup_player,
@@ -131,6 +132,7 @@ fn setup_player(mut commands: Commands, player_sprite_sheet: Res<PlayerSpriteShe
 			Transform::from_translation(Vec3::new(-100.0, 30.0, 0.0)),
 			Player,
 			player_sprite_sheet.idle.clone(),
+			StateScoped(GameState::Game),
 		))
 		.id();
 	/*let child = commands
