@@ -4,3 +4,4 @@
 .cargo/config.toml
 .envrc
 .DS_Store
+.env

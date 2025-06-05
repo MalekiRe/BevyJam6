@@ -8,7 +8,7 @@ const TRAUMA_DECAY_SPEED: f32 = 1.2; // How fast trauma decays
 const TRAUMA_INCREMENT: f32 = 20.0; // Increment of trauma per frame when holding space
 
 // screen_shake parameters, maximum addition by frame not actual maximum overall values
-const MAX_ANGLE: f32 = 1.5;
+const MAX_ANGLE: f32 = 1.2;
 const MAX_OFFSET: f32 = 800.0;
 
 pub struct ScreenShakePlugin;

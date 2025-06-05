@@ -1,6 +1,8 @@
 use crate::menus::GameState;
 use crate::theme::widget;
 use bevy::prelude::*;
+use bevy_jornet::Leaderboard;
+use bevy_simple_text_input::TextInput;
 
 pub struct MainMenuPlugin;
 impl Plugin for MainMenuPlugin {
@@ -9,7 +11,8 @@ impl Plugin for MainMenuPlugin {
 	}
 }
 
-fn spawn_main_menu(mut commands: Commands) {
+fn spawn_main_menu(mut commands: Commands, leaderboard: ResMut<Leaderboard>) {
+	leaderboard.refresh_leaderboard();
 	println!("UWU");
 	commands.spawn((Camera2d, StateScoped(GameState::MainMenu)));
 	commands.spawn((
@@ -20,6 +23,8 @@ fn spawn_main_menu(mut commands: Commands) {
 		children![
 			widget::button("Play", enter_gameplay),
 			widget::button("Settings", open_settings_menu),
+			widget::button("Shop", open_shop_menu),
+			widget::button("Leaderboard", open_leaderboard_menu),
 			//widget::button("Credits", open_credits_menu),
 			widget::button("Exit", exit_app),
 		],
@@ -46,9 +51,19 @@ fn open_settings_menu(
 	next_menu.set(GameState::Settings);
 }
 
-/*fn open_credits_menu(_: Trigger<Pointer<Click>>, mut next_menu: ResMut<NextState<Menu>>) {
-	next_menu.set(GameState::Credits);
-}*/
+fn open_shop_menu(
+	_: Trigger<Pointer<Click>>,
+	mut next_menu: ResMut<NextState<GameState>>,
+) {
+	next_menu.set(GameState::Shop);
+}
+
+fn open_leaderboard_menu(
+	_: Trigger<Pointer<Click>>,
+	mut next_menu: ResMut<NextState<GameState>>,
+) {
+	next_menu.set(GameState::Leaderboard);
+}
 
 #[cfg(not(target_family = "wasm"))]
 fn exit_app(_: Trigger<Pointer<Click>>, mut app_exit: EventWriter<AppExit>) {

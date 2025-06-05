@@ -290,10 +290,10 @@ fn start_chain_reaction(
 		let mut combo = 1;
 		//let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
-			AsyncWorld.send_event(SlimeDestroyed)?;
+			AsyncWorld.send_event(SlimeDestroyed).unwrap();
 			let sleep_duration =
 				Duration::from_secs_f32((0.5 / 1.2_f32.powf(i as f32)).max(0.05));
-
+			println!("I AM HERE");
 			AsyncWorld.sleep(sleep_duration).await;
 			AsyncWorld.run(|world: &mut World| {
 				world
@@ -378,7 +378,8 @@ fn start_chain_reaction(
 				AsyncWorld
 					.entity(entity)
 					.query::<&Transform>()
-					.get(|a| a.clone())?,
+					.get(|a| a.clone())
+					.unwrap(),
 				Text2d::new(combo.to_string()),
 				TextLayout::new_with_justify(JustifyText::Center),
 				TextCombo,
@@ -746,7 +747,7 @@ fn enemy_chainable_graphic(
 		if player.translation().distance(enemy_transform.translation())
 			<= DISTANCE_FOR_INTERACTION
 		{
-			commands.entity(enemy_entity).insert(EnemyClickable);
+			commands.entity(enemy_entity).try_insert(EnemyClickable);
 		} else {
 			commands.entity(enemy_entity).remove::<EnemyClickable>();
 		}
