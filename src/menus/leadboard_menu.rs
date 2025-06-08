@@ -3,10 +3,10 @@ use crate::theme::widget;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use bevy_jornet::{JornetPlugin, Leaderboard};
 use bevy_simple_text_input::{TextInput, TextInputPlugin};
 use std::env;
-use bevy::window::PrimaryWindow;
 
 pub struct LeaderboardMenuPlugin;
 
@@ -28,8 +28,16 @@ impl Plugin for LeaderboardMenuPlugin {
 	}
 }
 
-fn spawn_menu(mut commands: Commands, leaderboard: Res<Leaderboard>, window: Single<&Window, With<PrimaryWindow>>) {
-	commands.spawn((Camera2d, StateScoped(GameState::Leaderboard), IsDefaultUiCamera));
+fn spawn_menu(
+	mut commands: Commands,
+	leaderboard: Res<Leaderboard>,
+	window: Single<&Window, With<PrimaryWindow>>,
+) {
+	commands.spawn((
+		Camera2d,
+		StateScoped(GameState::Leaderboard),
+		IsDefaultUiCamera,
+	));
 	let mut children = vec![];
 
 	let mut score = leaderboard.get_leaderboard();
@@ -38,10 +46,13 @@ fn spawn_menu(mut commands: Commands, leaderboard: Res<Leaderboard>, window: Sin
 	for score in score {
 		children.push(
 			commands
-				.spawn((widget::label(format!(
-					"Name: {}, Score: {}, Timestamp: {}",
-					score.player, score.score, score.timestamp
-				)), Pickable::IGNORE))
+				.spawn((
+					widget::label(format!(
+						"Name: {}, Score: {}, Timestamp: {}",
+						score.player, score.score, score.timestamp
+					)),
+					Pickable::IGNORE,
+				))
 				.id(),
 		);
 	}

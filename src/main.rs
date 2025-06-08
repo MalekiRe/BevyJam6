@@ -520,19 +520,18 @@ fn prevent_enemies_from_collision(
 			if e2 == e1 {
 				continue;
 			}
-			
-			
+
 			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
 				{
 					let dir = p1.translation() - p2.translation();
-					let r = dir.length().max(0.001);         // avoid div-by-zero
+					let r = dir.length().max(0.001); // avoid div-by-zero
 
 					// Gaussian parameters
-					let σ = SMALL_REPULSION_DISTANCE * 0.5;   // “width” of the blob
-					let k = 2.0;                           // peak strength at r=0
+					let σ = SMALL_REPULSION_DISTANCE * 0.5; // “width” of the blob
+					let k = 2.0; // peak strength at r=0
 
 					// force magnitude: k * exp( −r² / (2 σ²) )
-					let magnitude = k * (-(r*r)/(1.3*σ*σ)).exp();
+					let magnitude = k * (-(r * r) / (1.3 * σ * σ)).exp();
 
 					// repulsion vector
 					let mut awa = dir / r * magnitude;
