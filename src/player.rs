@@ -28,6 +28,8 @@ fn handle_hit(
 	slimes: Query<(&Aabb, &Transform), With<Enemy>>,
 	mut gizmos: Gizmos,
 	mut game_state: ResMut<NextState<GameState>>,
+	asset_server: Res<AssetServer>,
+	mut commands: Commands,
 ) {
 	let mut player_aabb =
 		Aabb2d::new(player.0.center.xy(), player.0.half_extents.xy() / 3.5);
@@ -48,6 +50,7 @@ fn handle_hit(
 		);
 		if slime_aabb.intersects(&player_aabb) {
 			game_state.set(GameState::Shop);
+			commands.spawn(AudioPlayer::new(asset_server.load("audio/die.ogg")));
 		}
 	}
 }
