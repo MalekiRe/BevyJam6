@@ -51,8 +51,8 @@ fn handle_hit(
 			css::CORNFLOWER_BLUE,
 		);*/
 		if slime_aabb.intersects(&player_aabb) {
-			//game_state.set(GameState::Shop);
-			//commands.spawn(AudioPlayer::new(asset_server.load("audio/die.ogg")));
+			game_state.set(GameState::Shop);
+			commands.spawn(AudioPlayer::new(asset_server.load("audio/die.ogg")));
 		}
 	}
 }
