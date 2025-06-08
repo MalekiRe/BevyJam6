@@ -135,7 +135,7 @@ fn setup_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
 			};
 			commands.spawn((
 				Sprite {
-					image: asset_server.load("images/forest_.png"),
+					image: asset_server.load("images/forest2.png"),
 					rect: Some(Rect::new(
 						positions.x,
 						positions.y,
