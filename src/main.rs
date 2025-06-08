@@ -514,12 +514,22 @@ fn prevent_enemies_from_collision(
 	mut velocities: Query<&mut Velocity>,
 ) {
 	const REPULSION_DISTANCE: f32 = 30.0;
+	const SMALL_REPULSION_DISTANCE: f32 = 5.0;
 	for (e1, p1) in enemy_positions.iter() {
 		for (e2, p2) in enemy_positions.iter() {
 			if e2 == e1 {
 				continue;
 			}
 			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
+				if p1.translation().distance(p2.translation())
+					< SMALL_REPULSION_DISTANCE
+				{
+					let awa = ((p1.translation() - p2.translation()) / 100.0)
+						* random!(1.0..10.0);
+
+					velocities.get_mut(e1).unwrap().0 += awa;
+					velocities.get_mut(e2).unwrap().0 -= awa;
+				}
 				let awa = (p1.translation() - p2.translation()) / 350.0;
 				let awa = awa.lerp(Vec3::default(), 0.6);
 				velocities.get_mut(e1).unwrap().0 += awa;
