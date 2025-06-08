@@ -23,7 +23,7 @@ use crate::music::MusicPlugin;
 use crate::player::{AnimationState, Direction, PlayerPlugin, PlayerState};
 use crate::screen_shake::{ScreenShakePlugin, SlimeDestroyed};
 use crate::text_combo::{TextCombo, TextComboPlugin};
-use bevy::asset::Handle;
+use bevy::asset::{AssetMetaCheck, AssetPlugin, Handle};
 use bevy::audio::{PlaybackSettings, Volume};
 use bevy::color::Color;
 use bevy::color::palettes::css;
@@ -89,7 +89,11 @@ use random_number::random;
 fn main() {
 	App::new()
 		.add_plugins((
-			DefaultPlugins.set(ImagePlugin::default_nearest()),
+			DefaultPlugins.set(ImagePlugin::default_nearest())
+				.set(AssetPlugin {
+					meta_check: AssetMetaCheck::Never,
+					..default()
+				}),
 			MeshPickingPlugin,
 			bevy_defer::AsyncPlugin::default_settings(),
 			menus::MenuPlugins,
