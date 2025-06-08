@@ -6,6 +6,7 @@ mod player;
 mod screen_shake;
 mod text_combo;
 mod theme;
+mod tutorial_section;
 
 use std::cmp::max;
 use std::collections::HashSet;

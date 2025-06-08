@@ -40,8 +40,10 @@ fn handle_hit(
 		css::FOREST_GREEN,
 	);
 	for (slime_aabb, slime_transform) in slimes.iter() {
-		let mut slime_aabb =
-			Aabb2d::new(slime_aabb.center.xy(), slime_aabb.half_extents.xy() * Vec2::new(0.45, 0.8));
+		let mut slime_aabb = Aabb2d::new(
+			slime_aabb.center.xy(),
+			slime_aabb.half_extents.xy() * Vec2::new(0.45, 0.8),
+		);
 		slime_aabb.translate_by(slime_transform.translation.xy());
 		gizmos.rect_2d(
 			Isometry2d::new(slime_aabb.center(), Rot2::default()),

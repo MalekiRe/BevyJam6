@@ -22,6 +22,7 @@ fn spawn_main_menu(mut commands: Commands, leaderboard: ResMut<Leaderboard>) {
 		#[cfg(not(target_family = "wasm"))]
 		children![
 			widget::button("Play", enter_gameplay),
+			widget::button("Tutorial", open_tutorial),
 			widget::button("Settings", open_settings_menu),
 			widget::button("Shop", open_shop_menu),
 			widget::button("Leaderboard", open_leaderboard_menu),
@@ -49,6 +50,13 @@ fn open_settings_menu(
 	mut next_menu: ResMut<NextState<GameState>>,
 ) {
 	next_menu.set(GameState::Settings);
+}
+
+fn open_tutorial(
+	_: Trigger<Pointer<Click>>,
+	mut next_menu: ResMut<NextState<GameState>>,
+) {
+	next_menu.set(GameState::Tutorial);
 }
 
 fn open_shop_menu(

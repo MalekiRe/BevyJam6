@@ -28,7 +28,6 @@ fn spawn_menu(mut commands: Commands, leaderboard: Res<Leaderboard>) {
 	let mut score = leaderboard.get_leaderboard();
 	score.sort_by(|awa, uwu| uwu.score.partial_cmp(&awa.score).unwrap());
 
-
 	for score in score {
 		children.push(
 			commands

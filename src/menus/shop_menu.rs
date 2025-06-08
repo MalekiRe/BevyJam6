@@ -17,7 +17,6 @@ impl Plugin for ShopMenuPlugin {
 	}
 }
 
-
 fn reset_score(mut score: ResMut<Score>) {
 	score.0 = 0;
 }
@@ -26,10 +25,7 @@ fn add_to_total_points(score: Res<Score>, mut total_points: ResMut<TotalPoints>)
 	total_points.0 += score.0 as u64;
 }
 
-fn despawn_these(
-	mut commands: Commands,
-	query: Query<Entity, With<DespawnThese>>,
-) {
+fn despawn_these(mut commands: Commands, query: Query<Entity, With<DespawnThese>>) {
 	for entity in query.iter() {
 		commands.entity(entity).despawn();
 	}
@@ -45,7 +41,12 @@ pub struct TotalPoints(pub u64);
 #[derive(Component)]
 struct PointsTracker;
 
-fn spawn_shop_menu(mut commands: Commands, total_points: Res<TotalPoints>, slime_slowness_level: Res<SlimeSlownessLevel>, chain_radius_level: Res<ChainRadiusLevel>) {
+fn spawn_shop_menu(
+	mut commands: Commands,
+	total_points: Res<TotalPoints>,
+	slime_slowness_level: Res<SlimeSlownessLevel>,
+	chain_radius_level: Res<ChainRadiusLevel>,
+) {
 	commands.spawn((Camera2d, StateScoped(GameState::Shop), DespawnThese));
 
 	let menu = commands
@@ -66,9 +67,17 @@ fn spawn_shop_menu(mut commands: Commands, total_points: Res<TotalPoints>, slime
 	commands.entity(menu).insert((children![
 		widget::button("New Round", enter_gameplay),
 		widget::button("Main Menu", main_menu),
-		widget::button(format!("Chain Radius {}", chain_radius_level.0), buy_chain_radius),
+		widget::button(
+			format!("Chain Radius {}", chain_radius_level.0),
+			buy_chain_radius
+		),
 	],));
-	let slime_slowness = commands.spawn(widget::button(format!("Slime Slow {}", slime_slowness_level.0), buy_slime_slowness)).id();
+	let slime_slowness = commands
+		.spawn(widget::button(
+			format!("Slime Slow {}", slime_slowness_level.0),
+			buy_slime_slowness,
+		))
+		.id();
 	commands.entity(menu).add_child(slime_slowness);
 }
 

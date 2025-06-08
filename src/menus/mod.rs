@@ -10,6 +10,7 @@ use crate::menus::pause_menu::PauseMenuPlugin;
 use crate::menus::settings_menu::SettingsMenuPlugin;
 use crate::menus::shop_menu::ShopMenuPlugin;
 use crate::theme;
+use crate::tutorial_section::TutorialPlugin;
 use bevy::prelude::*;
 
 pub struct MenuPlugins;
@@ -22,6 +23,7 @@ impl Plugin for MenuPlugins {
 		app.add_plugins(PauseMenuPlugin);
 		app.add_plugins(LeaderboardMenuPlugin);
 		app.add_plugins(SettingsMenuPlugin);
+		app.add_plugins(TutorialPlugin);
 		app.add_plugins(ShopMenuPlugin);
 		app.add_plugins(theme::plugin);
 	}
@@ -36,6 +38,7 @@ pub enum GameState {
 	Game,
 	Leaderboard,
 	Shop,
+	Tutorial,
 }
 
 #[derive(States, Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
