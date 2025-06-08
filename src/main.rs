@@ -12,7 +12,7 @@ use std::cmp::max;
 use std::collections::HashSet;
 use std::f32::consts::PI;
 use std::hint::unreachable_unchecked;
-use std::ops::{Add, AddAssign, DerefMut, Sub};
+use std::ops::{Add, AddAssign, DerefMut, Div, Sub};
 use std::time::Duration;
 
 use crate::enemy::EnemyPlugin;
@@ -514,18 +514,31 @@ fn prevent_enemies_from_collision(
 	mut velocities: Query<&mut Velocity>,
 ) {
 	const REPULSION_DISTANCE: f32 = 30.0;
-	const SMALL_REPULSION_DISTANCE: f32 = 5.0;
+	const SMALL_REPULSION_DISTANCE: f32 = 20.0;
 	for (e1, p1) in enemy_positions.iter() {
 		for (e2, p2) in enemy_positions.iter() {
 			if e2 == e1 {
 				continue;
 			}
+			
+			
 			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
-				if p1.translation().distance(p2.translation())
-					< SMALL_REPULSION_DISTANCE
 				{
-					let awa = ((p1.translation() - p2.translation()) / 100.0)
-						* random!(1.0..10.0);
+					let dir = p1.translation() - p2.translation();
+					let r = dir.length().max(0.001);         // avoid div-by-zero
+
+					// Gaussian parameters
+					let σ = SMALL_REPULSION_DISTANCE * 0.5;   // “width” of the blob
+					let k = 2.0;                           // peak strength at r=0
+
+					// force magnitude: k * exp( −r² / (2 σ²) )
+					let magnitude = k * (-(r*r)/(1.3*σ*σ)).exp();
+
+					// repulsion vector
+					let mut awa = dir / r * magnitude;
+					while awa.length() >= 5.0 {
+						awa = awa.div(2.0)
+					}
 
 					velocities.get_mut(e1).unwrap().0 += awa;
 					velocities.get_mut(e2).unwrap().0 -= awa;
