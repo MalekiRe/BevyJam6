@@ -1,7 +1,11 @@
 use crate::menus::GameState;
-use crate::{LastEntityChained, Player};
+use crate::{Enemy, LastEntityChained, Player};
+use bevy::color::palettes::css;
+use bevy::math::bounding::{Aabb2d, BoundingVolume, IntersectsVolume};
 use bevy::prelude::*;
+use bevy::render::primitives::Aabb;
 use bevy_defer::{AsyncAccess, AsyncCommandsExtension, AsyncWorld};
+use std::ops::Mul;
 
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
@@ -15,6 +19,36 @@ impl Plugin for PlayerPlugin {
 			)
 				.chain(),
 		);
+		app.add_systems(Update, handle_hit);
+	}
+}
+
+fn handle_hit(
+	player: Single<(&Aabb, &Transform), With<Player>>,
+	slimes: Query<(&Aabb, &Transform), With<Enemy>>,
+	mut gizmos: Gizmos,
+	mut game_state: ResMut<NextState<GameState>>,
+) {
+	let mut player_aabb =
+		Aabb2d::new(player.0.center.xy(), player.0.half_extents.xy() / 3.5);
+	player_aabb.translate_by(player.1.translation.xy());
+	gizmos.rect_2d(
+		Isometry2d::new(player_aabb.center(), Rot2::default()),
+		player_aabb.half_size().mul(Vec2::splat(2.0)),
+		css::FOREST_GREEN,
+	);
+	for (slime_aabb, slime_transform) in slimes.iter() {
+		let mut slime_aabb =
+			Aabb2d::new(slime_aabb.center.xy(), slime_aabb.half_extents.xy() * Vec2::new(0.45, 0.8));
+		slime_aabb.translate_by(slime_transform.translation.xy());
+		gizmos.rect_2d(
+			Isometry2d::new(slime_aabb.center(), Rot2::default()),
+			slime_aabb.half_size().mul(Vec2::splat(2.0)),
+			css::CORNFLOWER_BLUE,
+		);
+		if slime_aabb.intersects(&player_aabb) {
+			game_state.set(GameState::Shop);
+		}
 	}
 }
 

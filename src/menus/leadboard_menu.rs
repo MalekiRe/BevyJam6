@@ -24,7 +24,12 @@ impl Plugin for LeaderboardMenuPlugin {
 fn spawn_menu(mut commands: Commands, leaderboard: Res<Leaderboard>) {
 	commands.spawn((Camera2d, StateScoped(GameState::Leaderboard)));
 	let mut children = vec![];
-	for score in &leaderboard.get_leaderboard() {
+
+	let mut score = leaderboard.get_leaderboard();
+	score.sort_by(|awa, uwu| uwu.score.partial_cmp(&awa.score).unwrap());
+
+
+	for score in score {
 		children.push(
 			commands
 				.spawn(widget::label(format!(

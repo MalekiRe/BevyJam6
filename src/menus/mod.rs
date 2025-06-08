@@ -8,6 +8,7 @@ use crate::menus::leadboard_menu::LeaderboardMenuPlugin;
 use crate::menus::main_menu::MainMenuPlugin;
 use crate::menus::pause_menu::PauseMenuPlugin;
 use crate::menus::settings_menu::SettingsMenuPlugin;
+use crate::menus::shop_menu::ShopMenuPlugin;
 use crate::theme;
 use bevy::prelude::*;
 
@@ -21,6 +22,7 @@ impl Plugin for MenuPlugins {
 		app.add_plugins(PauseMenuPlugin);
 		app.add_plugins(LeaderboardMenuPlugin);
 		app.add_plugins(SettingsMenuPlugin);
+		app.add_plugins(ShopMenuPlugin);
 		app.add_plugins(theme::plugin);
 	}
 }
