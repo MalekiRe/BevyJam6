@@ -26,11 +26,11 @@ fn music_controller(
 	mut game_music: Single<&mut AudioSink, With<GameMusic>>,
 ) {
 	if game_state.get() == &GameState::Game {
-		non_game_music.pause();
-		game_music.play();
+		non_game_music.set_volume(Volume::Linear(0.001));
+		game_music.set_volume(Volume::Linear(0.15));
 	} else {
-		game_music.pause();
-		non_game_music.play();
+		game_music.set_volume(Volume::Linear(0.001));
+		non_game_music.set_volume(Volume::Linear(0.15));
 	}
 }
 

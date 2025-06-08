@@ -14,8 +14,8 @@ impl Plugin for LeaderboardMenuPlugin {
 	fn build(&self, app: &mut App) {
 		dotenv::dotenv().ok();
 		app.add_plugins(TextInputPlugin);
-		let secret_key_1 = env::var("LEADERBOARD_ONE").unwrap();
-		let secret_key_2 = env::var("LEADERBOARD_TWO").unwrap();
+		let secret_key_1 = env!("LEADERBOARD_ONE");
+		let secret_key_2 = env!("LEADERBOARD_TWO");
 		app.add_plugins(JornetPlugin::with_leaderboard(
 			&*secret_key_1,
 			&*secret_key_2,

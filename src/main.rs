@@ -290,7 +290,6 @@ fn start_chain_reaction(
 		let mut combo = 1;
 		//let awa = awa;
 		for (i, entity) in entities_to_destroy.into_iter().enumerate() {
-			AsyncWorld.send_event(SlimeDestroyed).unwrap();
 			let sleep_duration =
 				Duration::from_secs_f32((0.5 / 1.2_f32.powf(i as f32)).max(0.05));
 			AsyncWorld.sleep(sleep_duration).await;
@@ -373,6 +372,10 @@ fn start_chain_reaction(
 					.unwrap();
 			});
 			AsyncWorld.sleep_frames(5).await;
+			if !AsyncWorld.entity(entity).query::<&Transform>().exists() {
+				continue;
+			}
+			AsyncWorld.send_event(SlimeDestroyed).unwrap();
 			AsyncWorld.spawn_bundle((
 				AsyncWorld
 					.entity(entity)
@@ -522,7 +525,7 @@ fn prevent_enemies_from_collision(
 			}
 
 			if p1.translation().distance(p2.translation()) < REPULSION_DISTANCE {
-				{
+				/*{
 					let dir = p1.translation() - p2.translation();
 					let r = dir.length().max(0.001); // avoid div-by-zero
 
@@ -541,7 +544,7 @@ fn prevent_enemies_from_collision(
 
 					velocities.get_mut(e1).unwrap().0 += awa;
 					velocities.get_mut(e2).unwrap().0 -= awa;
-				}
+				}*/
 				let awa = (p1.translation() - p2.translation()) / 350.0;
 				let awa = awa.lerp(Vec3::default(), 0.6);
 				velocities.get_mut(e1).unwrap().0 += awa;

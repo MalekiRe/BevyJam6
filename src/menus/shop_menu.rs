@@ -69,6 +69,8 @@ fn spawn_shop_menu(
 	commands.entity(menu).insert((children![
 		widget::button("New Round", enter_gameplay),
 		widget::button("Main Menu", main_menu),
+		widget::button("Leaderboard", open_leaderboard_menu),
+		widget::label(" "),
 		widget::button(
 			format!("Chain Radius {}", chain_radius_level.0),
 			buy_chain_radius
@@ -91,6 +93,13 @@ pub struct ChainRadiusLevel(pub(crate) u32);
 
 #[derive(Component)]
 struct SlimeSlownessButton;
+
+fn open_leaderboard_menu(
+	_: Trigger<Pointer<Click>>,
+	mut next_menu: ResMut<NextState<GameState>>,
+) {
+	next_menu.set(GameState::Leaderboard);
+}
 
 fn buy_chain_radius(
 	_: Trigger<Pointer<Click>>,

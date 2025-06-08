@@ -5,7 +5,7 @@ use rand_chacha::ChaCha8Rng;
 
 const CAMERA_DECAY_RATE: f32 = 0.95; // Adjust this for smoother or snappier decay
 const TRAUMA_DECAY_SPEED: f32 = 1.2; // How fast trauma decays
-const TRAUMA_INCREMENT: f32 = 27.0; // Increment of trauma per frame when holding space
+const TRAUMA_INCREMENT: f32 = 25.0; // Increment of trauma per frame when holding space
 
 // screen_shake parameters, maximum addition by frame not actual maximum overall values
 const MAX_ANGLE: f32 = 1.2;

@@ -54,7 +54,6 @@ fn spawn_menu(mut commands: Commands, possible_username: Option<Res<Username>>) 
 			widget::ui_root("Leaderboard"),
 			GlobalZIndex(2),
 			StateScoped(GameState::Settings),
-			#[cfg(not(target_family = "wasm"))]
 			children![
 				widget::button("Main Menu", back),
 				Text("Username for Leaderboard".to_string()),

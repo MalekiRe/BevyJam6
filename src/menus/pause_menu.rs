@@ -32,7 +32,6 @@ fn spawn_pause_menu(mut commands: Commands) {
 		widget::ui_root("Pause Menu"),
 		GlobalZIndex(2),
 		StateScoped(PauseMenu::Paused),
-		#[cfg(not(target_family = "wasm"))]
 		children![
 			widget::button("Resume", enter_gameplay),
 			widget::button("Exit", exit_gameplay),

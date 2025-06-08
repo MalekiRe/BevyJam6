@@ -19,6 +19,7 @@ fn do_tutorial(mut commands: Commands) {
 			Text2d::new("Welcome To Chain Wiper"),
 			TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
 			Transform::from_translation(Vec3::new(0.0, 45.0, 0.0)),
+			StateScoped(GameState::Tutorial)
 		));
 		let color = e.component::<TextColor>();
 		for i in 0..128 {
@@ -28,6 +29,7 @@ fn do_tutorial(mut commands: Commands) {
 		let e2 = AsyncWorld.spawn_bundle((
 			Text2d::new("In this game there are slimes of opposite polarities"),
 			TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
+			StateScoped(GameState::Tutorial)
 		));
 		let color = e2.component::<TextColor>();
 		for i in 0..128 {
@@ -83,7 +85,7 @@ fn do_tutorial(mut commands: Commands) {
 						color: Color::srgba(1.0, 1.0, 1.0, 0.0),
 						..default()
 					},
-					Transform::from_translation(Vec3::new(25.0, 0.0, 0.0))
+					Transform::from_translation(Vec3::new(25.0, 0.0, -1.0))
 						.with_scale(Vec3::splat(4.0))
 						.with_rotation(Quat::from_euler(
 							EulerRot::XYZ,
@@ -100,7 +102,7 @@ fn do_tutorial(mut commands: Commands) {
 						color: Color::srgba(1.0, 1.0, 1.0, 0.0),
 						..default()
 					},
-					Transform::from_translation(Vec3::new(-25.0, 0.0, 0.0))
+					Transform::from_translation(Vec3::new(-25.0, 0.0, -1.0))
 						.with_scale(Vec3::splat(4.0))
 						.with_rotation(Quat::from_euler(
 							EulerRot::XYZ,
@@ -133,6 +135,7 @@ fn do_tutorial(mut commands: Commands) {
 			),
 			TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
 			Transform::from_translation(Vec3::new(0.0, -200.0, 0.0)),
+			StateScoped(GameState::Tutorial),
 		));
 		let color = e2.component::<TextColor>();
 		for i in 0..128 {
@@ -141,6 +144,7 @@ fn do_tutorial(mut commands: Commands) {
 			color.get_mut(|c| c.0.set_alpha(i as f32 / 128.0))?;
 			AsyncWorld.yield_now().await;
 		}
+
 
 		for i in 0..64 {
 			let val = i as f32 / 64.0;
@@ -154,9 +158,26 @@ fn do_tutorial(mut commands: Commands) {
 		}
 
 		let e2 = AsyncWorld.spawn_bundle((
+			Text2d::new(
+				"Press space to start the chain reaction",
+			),
+			TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
+			Transform::from_translation(Vec3::new(0.0, -265.0, 0.0)),
+			StateScoped(GameState::Tutorial),
+		));
+		let color = e2.component::<TextColor>();
+		for i in 0..64 {
+			e2.component::<Transform>()
+				.translate_by(Vec3::new(0.0, 1.0, 0.0))?;
+			color.get_mut(|c| c.0.set_alpha(i as f32 / 64.0))?;
+			AsyncWorld.yield_now().await;
+		}
+
+		let e2 = AsyncWorld.spawn_bundle((
 			Text2d::new("Good luck"),
 			TextColor(Color::srgba(1.0, 1.0, 1.0, 0.0)),
-			Transform::from_translation(Vec3::new(0.0, -250.0, 0.0)),
+			Transform::from_translation(Vec3::new(0.0, -275.0, 0.0)),
+			StateScoped(GameState::Tutorial),
 		));
 		let color = e2.component::<TextColor>();
 		for i in 0..64 {

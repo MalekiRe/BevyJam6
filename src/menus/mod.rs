@@ -33,11 +33,11 @@ impl Plugin for MenuPlugins {
 #[states(scoped_entities)]
 pub enum GameState {
 	MainMenu,
-	#[default]
 	Settings,
 	Game,
 	Leaderboard,
 	Shop,
+	#[default]
 	Tutorial,
 }
 
