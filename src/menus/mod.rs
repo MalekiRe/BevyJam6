@@ -2,7 +2,7 @@ mod leadboard_menu;
 mod main_menu;
 mod pause_menu;
 mod settings_menu;
-mod shop_menu;
+pub mod shop_menu;
 
 use crate::menus::leadboard_menu::LeaderboardMenuPlugin;
 use crate::menus::main_menu::MainMenuPlugin;

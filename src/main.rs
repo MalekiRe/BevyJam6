@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use crate::enemy::EnemyPlugin;
 use crate::explosion::FireParticleMaterial;
+use crate::menus::shop_menu::{ChainRadiusLevel, SlimeSlownessLevel};
 use crate::menus::{GameState, PauseMenu};
 use crate::music::MusicPlugin;
 use crate::player::{AnimationState, Direction, PlayerPlugin, PlayerState};
@@ -251,7 +252,6 @@ fn start_chain_reaction(
 		if *prev == *player {
 			last_chained_entity = Some(e);
 		}
-		println!("{}, chained: {}", e, prev);
 	}
 
 	let Some(mut last_chained_entity) = last_chained_entity else {
@@ -272,7 +272,6 @@ fn start_chain_reaction(
 			break;
 		}
 	}
-	println!("entities to destroy: {:?}", entities_to_destroy);
 
 	// Bodge because my algorithm is bad somehow and is missing some entities
 	for (e, _) in query.iter() {
@@ -294,7 +293,6 @@ fn start_chain_reaction(
 			AsyncWorld.send_event(SlimeDestroyed).unwrap();
 			let sleep_duration =
 				Duration::from_secs_f32((0.5 / 1.2_f32.powf(i as f32)).max(0.05));
-			println!("I AM HERE");
 			AsyncWorld.sleep(sleep_duration).await;
 			AsyncWorld.run(|world: &mut World| {
 				world
@@ -507,7 +505,7 @@ pub struct Velocity(pub Vec3);
 pub struct MaxInternalVelocity(pub f32);
 impl MaxInternalVelocity {
 	pub fn random() -> Self {
-		Self(random!(0.7..1.0))
+		Self(random!(0.7..1.0) * 1.5)
 	}
 }
 
@@ -531,10 +529,15 @@ fn prevent_enemies_from_collision(
 	}
 }
 
-fn randomly_change_max_internal_velocity(mut query: Query<&mut MaxInternalVelocity>) {
+fn randomly_change_max_internal_velocity(
+	mut query: Query<&mut MaxInternalVelocity>,
+	slime_slowness_level: Res<SlimeSlownessLevel>,
+) {
+	const PER_LEVEL_DECAY: f32 = 0.98;
 	for mut v in query.iter_mut() {
 		if random!(0.0..1.0) < 0.01 {
 			*v = MaxInternalVelocity::random();
+			v.0 *= PER_LEVEL_DECAY.powi(slime_slowness_level.0 as i32);
 		}
 	}
 }
@@ -743,10 +746,11 @@ fn enemy_chainable_graphic(
 	mut commands: Commands,
 	enemies: Query<(Entity, &GlobalTransform), With<Enemy>>,
 	player: Single<&GlobalTransform, With<Player>>,
+	chain_radius: Res<ChainRadiusLevel>,
 ) {
 	for (enemy_entity, enemy_transform) in enemies.iter() {
 		if player.translation().distance(enemy_transform.translation())
-			<= DISTANCE_FOR_INTERACTION
+			<= (DISTANCE_FOR_INTERACTION / 2.0 + (chain_radius.0 as f32 * 2.0))
 		{
 			commands.entity(enemy_entity).try_insert(EnemyClickable);
 		} else {
@@ -762,9 +766,6 @@ fn on_mouse_no_longer_over_enemy(
 ) {
 	let (entity, mut sprite, enemy) = query.get_mut(trigger.target()).unwrap();
 	sprite.color = Color::from(*enemy);
-	/*if chained.contains(entity) {
-		sprite.color = sprite.color.with_saturation(0.2);
-	}*/
 }
 
 fn on_mouse_over_enemy(

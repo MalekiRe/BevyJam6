@@ -61,6 +61,8 @@ fn spawn_shop_menu(
 		.spawn((
 			widget::label(format!("Points: {}", total_points.0)),
 			PointsTracker,
+			DespawnThese,
+			StateScoped(GameState::Shop),
 		))
 		.id();
 	commands.entity(menu).add_child(points_tracker);
@@ -82,10 +84,10 @@ fn spawn_shop_menu(
 }
 
 #[derive(Resource, Default)]
-pub struct SlimeSlownessLevel(u32);
+pub struct SlimeSlownessLevel(pub(crate) u32);
 
 #[derive(Resource, Default)]
-pub struct ChainRadiusLevel(u32);
+pub struct ChainRadiusLevel(pub(crate) u32);
 
 #[derive(Component)]
 struct SlimeSlownessButton;
