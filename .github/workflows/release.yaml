@@ -325,6 +325,8 @@ jobs:
       - name: Upload all packages to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_CREDENTIALS }}
+          LEADERBOARD_ONE: ${{ secrets.LEADERBOARD_ONE }}
+          LEADERBOARD_TWO: ${{ secrets.LEADERBOARD_TWO }}
         run: |
           for channel in $(ls tmp); do
             ./butler push \
